@@ -202,6 +202,7 @@ class Realizer:
         self.pending_if = []
         self.copula = False
         self.subj_plural = False
+        self.gerund_verb = False
 
     def pos(self, g):
         base = g.split(".")[0]
@@ -305,7 +306,7 @@ class Realizer:
             trans.append(toks[i])
             i += 1
         objs = []
-        while i < stop and toks[i] not in STOPS:
+        while i < stop and toks[i] not in STOPS and toks[i] != "COMP.SIM":
             if self.pos(toks[i]) == "ADJ" and (i + 1 >= stop or self.pos(toks[i + 1]) not in ("N", "PRON")):
                 objs.append((None, toks[i].replace("_", " "), {toks[i]}, False, False))
                 i += 1
@@ -322,7 +323,7 @@ class Realizer:
             head_v = self.pos(next((t for t in toks[begin:i] if not t.endswith("-")), "")) == "V"
             objs.append((case, e, set(toks[begin:i]), verbal, head_v))
         sub = None
-        if i < stop and toks[i] in ("COMP", "IF"):
+        if i < stop and toks[i] in ("COMP", "IF", "COMP.SIM"):
             sub, i = self.clause(toks, None, i, stop)
             if sub.startswith("if "):
                 self.pending_if.append(sub)     # conditionals go up front
@@ -344,6 +345,9 @@ class Realizer:
                 oblique.append(f"{CASE_PREP[case]} {e}")
                 continue
             if verbal and not case:
+                if self.gerund_verb:        # 'stop hurting me', not 'stop to hurt me'
+                    e = e.replace("to ", "", 1).split(" ", 1)
+                    e = " ".join([self.gerund(e[0])] + e[1:])
                 direct.append(e)            # 'manage to love me'
                 continue
             t = tq.pop(0) if tq else "-OBJ"
@@ -411,9 +415,12 @@ class Realizer:
         if i < stop and toks[i] == "AND":
             lead = "and"
             i += 1
-        if i < stop and toks[i] in ("COMP", "IF"):
-            comp = "if" if toks[i] == "IF" else "that"
+        if i < stop and toks[i] in ("COMP", "IF", "COMP.SIM"):
+            comp = {"IF": "if", "COMP.SIM": "like"}.get(toks[i], "that")
             i += 1
+        if i < stop and toks[i] == "OH" and stop - i == 1:
+            self.depth -= 1
+            return "Oh!", i + 1
         question = i < stop and toks[i] == "Q"
         if question:
             i += 1
@@ -453,6 +460,7 @@ class Realizer:
             langs = self.langs[i]
         i += 1
         self.copula = v == "be"
+        self.gerund_verb = v.split(".")[0] in ("stop", "keep", "finish", "quit", "avoid", "enjoy", "mind")
         rest, i = self.tail(toks, i, stop)
         direct, trans, objs = self.last_direct, self.last_trans, self.last_objs
         verb = self.verb(v, aspect, langs, neg, subj)
@@ -468,7 +476,7 @@ class Realizer:
             more, i = self.tail(toks, i + 2, stop)
             v2_en = v2.replace(".", " ") if aspect == "IRR" else self.verb(v2, aspect, langs, None, subj)
             rest = rest + ["and", v2_en] + more
-        if i < stop and toks[i] in ("COMP", "IF"):
+        if i < stop and toks[i] in ("COMP", "IF", "COMP.SIM"):
             sub, i = self.clause(toks, langs, i, stop)
             if sub.startswith("if "):
                 self.pending_if.append(sub)

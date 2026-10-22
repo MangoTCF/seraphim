@@ -74,6 +74,8 @@ class Word:
     mouths: dict
     line: int
     sentence_start: bool = False
+    tones: dict = field(default_factory=dict)    # tonal markers: {"pain": 0.9, ...}
+    stammer: bool = False
 
 
 @dataclass
@@ -95,6 +97,28 @@ def _split_marks(tok):
                 changed = True
                 break
     return tok, level
+
+
+TONES = ("pain", "scream", "anger", "fear", "whimper")
+TONE_ALIASES = {"command": "anger", "rage": "anger", "terror": "fear", "tremble": "fear",
+                "agony": "scream", "sob": "whimper", "hurt": "pain"}
+
+
+def parse_tones(spec):
+    """'pain:0.9,scream' -> {'pain': 0.9, 'scream': 1.0}."""
+    out = {}
+    for part in str(spec).replace(" ", "").split(","):
+        if not part:
+            continue
+        name, _, val = part.partition(":")
+        name = TONE_ALIASES.get(name.lower(), name.lower())
+        if name not in TONES:
+            raise ValueError(f"unknown tone {name!r}; known: {', '.join(TONES)}")
+        v = float(val) if val else 1.0
+        if not 0 <= v <= 1:
+            raise ValueError(f"tone {name} intensity {v} is outside 0..1")
+        out[name] = v
+    return out
 
 
 def parse_token(raw, begadkefat="soft", rng=None, heresy=False, reading="matres"):
@@ -189,17 +213,29 @@ def parse(text, heresy=False, seed=0, dialect=None):
         if s.split()[0].lower() == "word":
             args = s.split()[1:]
             langs = None
-            if args:
+            tones, stammer = {}, False
+            if args and not args[0].startswith("tone=") and args[0] != "stammer":
                 langs = []
-                for t in args[0].lower().split("+"):
+                for t in args.pop(0).lower().split("+"):
                     if t not in TENSE_LANG:
                         raise ScoreError(f"line {ln}: unknown tense {t!r}")
                     langs.append(TENSE_LANG[t])
-            elif words:
-                langs = list(words[-1].langs)   # tense carries over from the previous word
-            else:
-                langs = [TENSE_LANG[meta["tense"].lower()]]
-            cur = Word(langs, {m: MouthLine() for m in MOUTHS}, ln, sentence_start)
+            for a in args:
+                if a == "stammer":
+                    stammer = True
+                elif a.startswith("tone="):
+                    try:
+                        tones = parse_tones(a[5:])
+                    except ValueError as e:
+                        raise ScoreError(f"line {ln}: {e}") from None
+                else:
+                    raise ScoreError(f"line {ln}: unknown word option {a!r} (expected tone=… or stammer)")
+            if langs is None:
+                if words:
+                    langs = list(words[-1].langs)   # tense carries over from the previous word
+                else:
+                    langs = [TENSE_LANG[meta["tense"].lower()]]
+            cur = Word(langs, {m: MouthLine() for m in MOUTHS}, ln, sentence_start, tones, stammer)
             sentence_start = False
             words.append(cur)
             continue

@@ -33,6 +33,12 @@ PREP_CASE = {
 POSS_PRED = {"mine": "1S", "yours": "2S", "hers": "3S", "ours": "1P", "theirs": "3P"}
 IDIOMS = {("adam", "apple"): "Adam's_apple"}      # possessive idioms kept whole
 IRREALIS_AUX = {"would", "could", "should", "might", "'d"}
+ARCHAIC_IMPERATIVES = {"begone": "begone", "avaunt": "begone", "behold": "see", "hark": "hear", "lo": "see"}
+CRIES = {"oh", "ah", "ow", "ouch", "argh", "oy", "alas", "aah", "ahh", "ugh", "aaah"}
+PAIN_CUES = {"hurt", "pain", "break", "wound", "burn", "bleed", "suffer", "agony", "ache", "die", "kill",
+             "crush", "tear", "torment", "scream", "cry"}
+FEAR_CUES = {"evil", "spirit", "demon", "devil", "afraid", "fear", "scared", "monster", "dark", "darkness",
+             "help", "flee", "terror"}
 SKIP_ADV = {"never", "not", "n't", "then"}
 TRANSITIVIZED = {"BEN": "-BEN", "MAL": "-MAL", "DAT": "-DAT"}
 WH_CASE = {"how": "INS", "where": "LOC", "when": "LOC", "why": "BEN", "whence": "ABL", "whither": "ALL"}
@@ -176,11 +182,12 @@ class Translator:
         kids = [c for c in v.children if c not in self.skip]
         aux = [c for c in kids if c.dep_ in ("aux", "auxpass")]
         conditional = any(c.dep_ == "mark" and c.lower_ == "if" for c in kids)
+        simile = any(c.dep_ == "mark" and c.lower_ in ("like", "as") for c in kids)
         irrealis = any(a.lower_ in IRREALIS_AUX for a in aux) or (conditional and v.tag_ == "VBD")
         if embedded and not nominal:
             t = self.tense_of(v)
             mark = f"^{t}" if own_tense and t and t != own_tense and not irrealis else ""
-            out.append(("IF" if conditional else "COMP") + mark)
+            out.append(("IF" if conditional else "COMP.SIM" if simile else "COMP") + mark)
         negs = [c for c in kids if c.dep_ == "neg"]
         imperative = main and self.imperative(v)
         future = any(a.lower_ in ("will", "shall", "'ll", "wo") for a in aux)
@@ -331,24 +338,62 @@ class Translator:
             # Translate this part with everything else split off hidden.
             self.skip = set().union(*(t for i, t in subtrees.items() if i != c.i)) - subtrees[c.i]
             text = " ".join(t.text for t in c.subtree if t not in self.skip and not t.is_punct)
+            start_i = min(t.i for t in c.subtree if t not in self.skip)
             if kind == "imperative":
-                out.append((self.clause(c, main=True), "nonpast", text))
+                out.append((start_i, self.clause(c, main=True), "nonpast", text))
             else:
                 self.notes.append(f"vocative {text!r} spoken on its own, in VOC-")
-                out.append((self.np(c, "VOC"), "nonpast", text))
+                out.append((start_i, self.np(c, "VOC"), "nonpast", text))
         self.skip = set().union(*subtrees.values())
         question = sent.text.rstrip().rstrip("!").endswith("?")
-        if root.pos_ not in ("VERB", "AUX"):
+        rest = " ".join(t.text for t in sent if t not in self.skip and not t.is_punct)
+        first = min((t.i for t in sent if t not in self.skip and not t.is_punct), default=sent.start)
+        if root.lower_ in ARCHAIC_IMPERATIVES:
+            # 'Begone!' (spaCy doesn't know it's a verb)
+            verb = ARCHAIC_IMPERATIVES[root.lower_]
+            out.append((first, ["IMP", "2S:PRON@mainsubj", verb + ":V@main"], "nonpast", rest))
+        elif root.pos_ == "INTJ" or root.lower_ in CRIES:
+            # 'Oh!': a cry, not a vocative
+            out.append((first, ["OH:INTJ" if root.lower_ in CRIES else root.lower_ + ":INTJ"], "nonpast", rest))
+        elif root.pos_ not in ("VERB", "AUX"):
             # 'My sweet…': no verb at all, so a vocative on its own
             self.notes.append("verbless sentence read as a vocative")
-            text = " ".join(t.text for t in sent if t not in self.skip and not t.is_punct)
-            return out + [(self.np(root, "VOC"), "nonpast", text)]
-        pieces, tense, _ = self.sentence(sent, question)
-        if any(c.dep_ == "cc" and c.i == sent.start for c in root.children):
-            pieces = ["AND"] + pieces         # 'And I want to …'
-        rest = " ".join(t.text for t in sent if t not in self.skip and not t.is_punct)
-        out.append((pieces, tense, rest))
-        return out
+            out.append((first, self.np(root, "VOC"), "nonpast", rest))
+        else:
+            pieces, tense, _ = self.sentence(sent, question)
+            if any(c.dep_ == "cc" and c.i == sent.start for c in root.children):
+                pieces = ["AND"] + pieces         # 'And I want to …'
+            out.append((first, pieces, tense, rest))
+        return [u[1:] for u in sorted(out, key=lambda u: u[0])]
+
+    def tones(self, sent, stammer=False):
+        """Tonal markers from the English: pain words and cries, '!' for
+        screams and commands, fear words, ellipses for trembling and
+        trailing off."""
+        text = sent.text.strip()
+        lemmas = {t.lemma_.lower() for t in sent} | {t.lower_ for t in sent}
+        excl = "!" in text
+        trails = text.endswith(("...", "…"))
+        imperative = (sent.root.lower_ in ARCHAIC_IMPERATIVES) or self.imperative(sent.root)
+        cry = bool(lemmas & CRIES)
+        t = {}
+        if lemmas & PAIN_CUES:
+            t["pain"] = 0.8 + (0.1 if excl else 0)
+        if cry:
+            t["pain"] = max(t.get("pain", 0), 0.9)
+            if excl:
+                t["scream"] = 0.85
+        if imperative and excl:
+            t["anger"] = 0.8
+        if "pain" in t and excl and "scream" not in t:
+            t["scream"] = 0.4 if imperative else 0.6
+        if lemmas & FEAR_CUES:
+            t["fear"] = 0.5
+        if "..." in text or "…" in text or stammer:
+            t["fear"] = max(t.get("fear", 0), 0.6 if stammer else 0.45)
+        if trails:
+            t["whimper"] = 0.5
+        return {k: round(v, 2) for k, v in t.items()}
 
     def sentence(self, sent, question=False):
         root = sent.root
@@ -371,9 +416,22 @@ class Translator:
 def translate(text, lexicon):
     tr = Translator()
     out = []
-    for sent in nlp()(text).sents:
+    sents = list(nlp()(text).sents)
+    stammered = set()
+    for a, b in zip(sents, sents[1:]):
+        words_a = [t for t in a if not t.is_punct and not t.is_space]
+        words_b = [t for t in b if not t.is_punct and not t.is_space]
+        # 'I... I feel': a fragment that the next sentence starts over
+        if words_a and words_b and len(words_a) <= 2 and a.text.rstrip().endswith(("...", "…", "-", "—")) \
+                and words_a[0].lower_ == words_b[0].lower_:
+            stammered.add(a.start)
+    for sent in sents:
+        if sent.start in stammered:
+            continue
+        stammer = any(s.end == sent.start for s in sents if s.start in stammered)
         tr.notes = []
         tr.skip = set()
+        tones = tr.tones(sent, stammer)
         for k, (pieces, tense, label) in enumerate(tr.utterances(sent)):
             terms = categorize(pieces, lexicon)
             terms = [Term("Ø", "COMP", "c"), Term("Ø", "T", "spec")] + terms
@@ -381,6 +439,10 @@ def translate(text, lexicon):
             s = Sentence(terms, [_norm_tense(tense)], english=label)
             s.stages = [("english", label), ("gloss", gloss), ("tense", tense)]
             s.stages += [("note", n) for n in tr.notes]
+            s.tones = tones
+            s.stammer = stammer and k == 0
+            if tones or s.stammer:
+                s.stages.append(("tone", ", ".join(f"{t} {v}" for t, v in tones.items()) + (" (stammer)" if s.stammer else "")))
             s.source = sent.text.strip() if k == 0 else ""   # the original wording, for titles
             tr.notes = []
             out.append(s)

@@ -31,7 +31,7 @@ ASPECTS = {"PERF", "NPFV", "NMPF", "PFV", "PROG", "HAB", "IMP", "IRR"}   # IMP, 
 CASES = {"NOM", "ABSV", "INS", "ABS", "CON", "DAT", "LOC", "ABL", "ALL", "TRAL", "VOC", "AVR", "BEN"}
 TRANSITIVIZERS = {"OBJ", "BEN", "MAL", "INS", "DAT", "DIS", "ORN"}
 PRO = {"COMP": "PRO:COMP", "T": "PRO:T", "NEG": "PRO:NEG", "V": "PRO:V", "K": "PRO:K",
-       "N": "PRO:N", "ADJ": "PRO:ADJ", "ADV": "PRO:ADV", "CONJ": "PRO:CONJ"}
+       "N": "PRO:N", "ADJ": "PRO:ADJ", "ADV": "PRO:ADV", "CONJ": "PRO:CONJ", "INTJ": "PRO:INTJ"}
 TENSES = ("farpast", "gnomic", "nearpast", "nonpast")
 TENSE_ALIASES = {"fpst": "farpast", "gnom": "gnomic", "pst": "nearpast", "past": "nearpast",
                  "npst": "nonpast", "npres": "nonpast", "present": "nonpast"}
@@ -71,6 +71,8 @@ class Sentence:
     words: list = field(default_factory=list)
     order: list = field(default_factory=list)
     stages: list = field(default_factory=list)
+    tones: dict = field(default_factory=dict)       # tonal markers for every word
+    stammer: bool = False
 
 
 # ------------------------------------------------------------ gloss parsing
@@ -129,6 +131,8 @@ def categorize(pieces, lexicon=None):
             cat = {"PRON": "N"}.get(pos.upper(), pos.upper())
         elif base in ("COMP", "Q", "IF"):
             cat = "COMP"
+        elif pos.upper() == "INTJ":
+            cat = "INTJ"
         elif base == "AND":
             cat = "CONJ"
         elif base in ASPECTS:
@@ -300,8 +304,9 @@ def to_sera(sentences, lexicon, title="", vary=True, seed=0, dialect=None):
         if si:
             out.append("---")
         out.append(f"# {s.english or ''}".rstrip())
-        for w in s.order or s.words:
-            mark = "+".join(w.eff)
+        tone = (" tone=" + ",".join(f"{k}:{v:.2g}" for k, v in s.tones.items())) if s.tones else ""
+        for k, w in enumerate(s.order or s.words):
+            mark = "+".join(w.eff) + tone + (" stammer" if s.stammer and k == 0 else "")
             out.append(f"word {mark}    # {w.index + 1}: {w.top} / {_g(w.m1)} / {_g(w.m2)} / {w.end or '-'}")
             out.append(f"  top: {' '.join(v(lexicon.tokens(w.top)))}")
             for name, t in (("1", w.m1), ("2", w.m2)):

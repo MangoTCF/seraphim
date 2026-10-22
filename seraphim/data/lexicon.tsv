@@ -105,3 +105,15 @@ eat	V	אכל גם☀ מזון	crafted
 obsession	N	אובססיה גיהנם🔆 טירוף	crafted
 swallow	V	בלע אוי☢	crafted
 whole	ADJ	שלם גם🔆	crafted
+# Interjection, 'as if', and the words for 'Begone, evil spirits!…' (pain test text).
+begone	V	לך אנא🔆 הלאה	crafted
+stop	V	די אך☢	crafted
+OH	INTJ	אוי☢ אה	crafted
+COMP.SIM	COMP	כאילו אולי🔆	crafted
+PRO:INTJ	-	אוי☀ אלוקים	crafted
+hurt	V	כאב אש☀ פצע	crafted
+evil	ADJ	רע אבדון☢	crafted
+spirit	N	רוח אויר☀	crafted
+feel	V	חש אנוש☀	crafted
+wing	N	כנף אבר☢ נוצה	crafted
+break	V	שבר אוי☀ שבר	crafted
