@@ -218,11 +218,20 @@ def fit(segs, target):
 # don't change what it means; they change the voice, the way pain, fear and
 # anger change a real one.
 
-def word_tones(w, score, opts):
+def word_tones(w, score, opts, dia=None):
+    """A word's tones. The dialect's default (seraphim: condescending) is
+    replaced by the score's @tone; a word's own markers replace both (a
+    screaming angel has stopped being condescending); --tone adds on top.
+    'neutral' anywhere clears everything."""
     from .score import parse_tones
-    t = parse_tones(score.meta["tone"]) if "tone" in score.meta else {}
-    t.update(w.tones)
-    t.update(opts.tones or {})
+    base = parse_tones(dia.tone) if dia is not None and dia.tone else {}
+    if "tone" in score.meta:
+        base = parse_tones(score.meta["tone"])
+    t = dict(w.tones) if w.tones else dict(base)
+    cli = opts.tones or {}
+    if "neutral" in cli or "neutral" in t:
+        t = {}
+    t.update({k: v for k, v in cli.items() if k != "neutral"})
     return t
 
 
@@ -232,8 +241,9 @@ def tone_timing(segs, tones):
     if not tones:
         return segs
     pain, scream, anger, fear, whimper = (tones.get(k, 0) for k in ("pain", "scream", "anger", "fear", "whimper"))
-    vk = 1 + 0.6 * pain + 1.0 * scream - 0.15 * anger
-    ck = 1 - 0.2 * anger - 0.1 * fear
+    smug = tones.get("condescend", 0)
+    vk = 1 + 0.6 * pain + 1.0 * scream - 0.15 * anger + 0.35 * smug     # unhurried, drawn-out vowels
+    ck = 1 - 0.2 * anger - 0.1 * fear + 0.1 * smug
     ak = 1 + 0.4 * pain + 0.8 * scream + 0.4 * anger - 0.4 * whimper
     for x in segs:
         kind = PHONES.get(x.phone, {}).get("kind")
@@ -259,13 +269,16 @@ def stammer(segs, rng, fear=0.5):
     return out + segs
 
 
-def tone_pitch(segs, tones, rng):
+def tone_pitch(segs, tones, rng, base=None, final=False):
     """Pitch under strain. Pain pushes the voice up and makes each vowel wail
     downward, with sudden upward cracks where the voice breaks; a scream
     goes higher still and arcs; fear raises it a little; a whimper sinks."""
     if not tones:
         return segs
     pain, scream, anger, fear, whimper = (tones.get(k, 0) for k in ("pain", "scream", "anger", "fear", "whimper"))
+    smug = tones.get("condescend", 0)
+    if smug:
+        segs = condescend(segs, smug, rng, base, final)
     lift = 2 ** ((6 * pain + 12 * scream + 2 * anger + 3 * fear - 2 * whimper) / 12)
     out = []
     for x in segs:
@@ -301,7 +314,35 @@ def tone_gain(tones):
     if not tones:
         return 1.0
     g = lambda k: tones.get(k, 0)
-    return max(1 + 0.5 * g("pain") + 1.4 * g("scream") + 0.5 * g("anger") - 0.45 * g("whimper"), 0.3)
+    return max(1 + 0.5 * g("pain") + 1.4 * g("scream") + 0.5 * g("anger") - 0.45 * g("whimper")
+               - 0.12 * g("condescend"), 0.3)
+
+
+def condescend(segs, c, rng, base=None, final=False):
+    """Condescension: exaggerated, sing-song pitch (the swings around the
+    voice's centre stretched up to 1.8x, a lilt on long vowels) and a closed,
+    final fall at the end of a sentence."""
+    base = base or np.median([x.f0[0] for x in segs if x.f0] or [1.0])
+    total = sum(x.dur for x in segs) or 1
+    out, t = [], 0.0
+    for x in segs:
+        if not x.f0:
+            out.append(x)
+            t += x.dur
+            continue
+        def shape(f, at):
+            f = base * (f / base) ** (1 + 0.8 * c)                     # wider range
+            if final:
+                f *= 2 ** (-4 * c * (at / total) ** 1.5 / 12)         # the matter is closed
+            return f
+        a, b = shape(x.f0[0], t), shape(x.f0[1], t + x.dur)
+        if PHONES.get(x.phone, {}).get("kind") == "vowel" and x.dur > 0.1:
+            mid = (a + b) / 2 * 2 ** (c * rng.uniform(1, 2.5) / 12)  # the lilt
+            out += [Seg(x.phone, x.dur * 0.5, (a, mid), x.tag, x.amp), Seg(x.phone, x.dur * 0.5, (mid, b), x.tag, x.amp)]
+        else:
+            out.append(Seg(x.phone, x.dur, (a, b), x.tag, x.amp))
+        t += x.dur
+    return out
 
 
 def tone_voice(v, tones):
@@ -311,11 +352,13 @@ def tone_voice(v, tones):
     if not tones:
         return v
     pain, scream, anger, fear, whimper = (tones.get(k, 0) for k in ("pain", "scream", "anger", "fear", "whimper"))
+    smug = tones.get("condescend", 0)
     return replace(v,
-                   oq=max(v.oq - 0.12 * pain - 0.15 * scream - 0.1 * anger + 0.1 * whimper, 0.35),
+                   oq=max(v.oq - 0.12 * pain - 0.15 * scream - 0.1 * anger + 0.1 * whimper + 0.05 * smug, 0.35),
+                   fry=max(v.fry, 0.3 * smug),                           # the dismissive creak
                    jitter=v.jitter * (1 + 4 * pain + 3 * scream + 2 * fear),
                    roar=min(1.0, v.roar + 0.35 * pain + 0.6 * scream + 0.15 * anger),
-                   breath=v.breath + 0.15 * pain + 0.3 * whimper + 0.15 * fear,
+                   breath=v.breath + 0.15 * pain + 0.3 * whimper + 0.15 * fear + 0.1 * smug,
                    voicing=v.voicing * (1 - 0.3 * whimper),
                    open=max(v.open, scream, 0.3 * pain),
                    vibrato=max(v.vibrato, 0.035 * fear), vib_rate=7.5 if fear else v.vib_rate)
@@ -667,7 +710,7 @@ def synthesize(score, opts=None, progress=None):
     # ---- lay out words in time
     plans = []
     t = LEAD_IN
-    wtones = [word_tones(w, score, opts) for w in score.words]
+    wtones = [word_tones(w, score, opts, dia) for w in score.words]
     last_of_sentence = {i for i, w in enumerate(score.words)
                         if i + 1 == len(score.words) or score.words[i + 1].sentence_start}
     for wi, w in enumerate(score.words):
@@ -679,6 +722,8 @@ def synthesize(score, opts=None, progress=None):
             if not ml.silent:
                 segs = line_segments(ml, tempo, _rng(opts.seed, 0, wi, mi), dia.moan, wi in last_of_sentence)
                 segs = tone_timing(segs, wtones[wi])
+                if wtones[wi].get("condescend") and wi in last_of_sentence:
+                    segs.append(Seg("h", 0.25 + 0.15 * wtones[wi]["condescend"], amp=0.6))   # *sigh*
                 if w.stammer:
                     segs = stammer(segs, _rng(opts.seed, 13, wi, mi), wtones[wi].get("fear", 0.5))
                 lines[m] = segs
@@ -729,14 +774,15 @@ def synthesize(score, opts=None, progress=None):
                     segs = contour(lines[m], voices[m], start, s0, s1, shape, wobble,
                                    {tg for (k, tg) in accents if k == wi}, prev_end)
                     segs = micro(segs)
-                    segs = tone_pitch(segs, wtones[wi], mrng)
+                    segs = tone_pitch(segs, wtones[wi], mrng, voices[m].f0, wi in last_of_sentence)
                     if dia.moan:
                         segs = moanify(segs, dia.moan, mrng, dia.grab)
                     lines[m] = segs
                 elif opts.hum:
                     segs = contour(hum_segments(length, dia.moan, mrng), voices[m], start, s0, s1,
                                    shape, wobble, set(), prev_end)
-                    hums[(wi, m)] = tone_pitch(hum_glide(segs, dia.moan, mrng), wtones[wi], mrng)
+                    hums[(wi, m)] = tone_pitch(hum_glide(segs, dia.moan, mrng), wtones[wi], mrng,
+                                               voices[m].f0, wi in last_of_sentence)
                 else:
                     continue
                 voiced = [x for x in (lines[m] if m in lines else hums[(wi, m)]) if x.f0 and x.phone != "sil"]

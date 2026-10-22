@@ -99,8 +99,10 @@ def _split_marks(tok):
     return tok, level
 
 
-TONES = ("pain", "scream", "anger", "fear", "whimper")
+TONES = ("pain", "scream", "anger", "fear", "whimper", "condescend", "neutral")
 TONE_ALIASES = {"command": "anger", "rage": "anger", "terror": "fear", "tremble": "fear",
+                "smug": "condescend", "haughty": "condescend", "patronizing": "condescend",
+                "patronising": "condescend", "condescending": "condescend", "none": "neutral",
                 "agony": "scream", "sob": "whimper", "hurt": "pain"}
 
 

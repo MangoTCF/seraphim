@@ -147,6 +147,9 @@ How a word is said, without changing what it means: pain, fear and anger change 
 | `anger` | Louder, faster consonants, pressed voice, a little higher ("Begone!") |
 | `fear` | An irregular tremor in pitch and loudness, breathier, higher, hurried |
 | `whimper` | Softer, breathy and thin, pitch sinking |
+| `condescend` (`smug`, `haughty`, `patronizing`) | The voice of a higher being: unhurried (vowels drawn out, ~15% slower), exaggerated sing-song pitch (swings around the voice's centre stretched, ~1.6× wider at the default 0.6, with a lilt on long vowels), sentences closing on a falling, final note, a relaxed slightly breathy voice with a dismissive creak, a touch quieter, and a weary sigh after each sentence |
+
+**The seraphic dialect is condescending by default** (`condescend:0.6`): every word without its own markers gets it. A score's `@tone:` replaces the default, a word's own markers replace both (a screaming angel has stopped being condescending), `--tone` adds on top, and `--tone neutral` turns it all off.
 
 While a mouth is in pain or screaming, the praise choir falters with it: the chant sags, cracks and drops out (mirrored correctly for backmasked choirs). Breaking words ("break", "snap", "crack", "tear") get a crack inside the wing, and wing words a rustle of feathers, both at the ears.
 

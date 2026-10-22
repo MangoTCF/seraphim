@@ -60,6 +60,7 @@ class Dialect:
     grab: float = 0.0
     hunger: float = 0.0
     gender: float = None        # default voice (-1..1) when -v isn't given
+    tone: str = None            # default tonal marker for words that carry none
     choir: str = "praise"       # praise | backmask
     mode: str = "dorian"        # dorian | locrian | phrygian
     choir_pitch: float = 0.0    # semitones
@@ -80,7 +81,8 @@ class Dialect:
 
 
 DIALECTS = {
-    "seraphic": Dialect("seraphic"),
+    # Higher beings: by default every unmarked word is a little condescending.
+    "seraphic": Dialect("seraphic", tone="condescend:0.6"),
     "demonic": Dialect("demonic", heresy=True, growl=0.8, fry=0.4, roar=0.55, whistle=0.45,
                        throat=0.6, pitch=-4, disfigure=0.7, hunger=0.3, choir="backmask", mode="locrian",
                        choir_pitch=-12),
