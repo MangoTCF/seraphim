@@ -504,7 +504,7 @@ def hungry_tender(score, plans):
     return out
 
 
-def grab_curves(plans, sentences, flags, dia, n):
+def grab_curves(plans, sentences, flags, role, n):
     """How far each mouth has pulled in toward the listener's ear, 0..~0.9,
     over time: drifting in over each sentence, lurching closer on hungry and
     tender words, easing back between sentences."""
@@ -521,6 +521,14 @@ def grab_curves(plans, sentences, flags, dia, n):
         base[after] = np.maximum(base[after], 0.9 * np.exp(-(t[after] - s1) / 0.5))
     out = {}
     for m in MOUTHS:
+        # How much this mouth grabs, word by word (it changes when a
+        # nephilim mouth changes sides), eased so nothing jumps.
+        amount = np.full(m_, role[(0, m)].grab)
+        for wi, (_w, start, *_r) in enumerate(plans):
+            amount[t >= start] = role[(wi, m)].grab
+        if np.ptp(amount):
+            k = int(0.3 * rate)
+            amount = np.convolve(np.pad(amount, k, mode="edge"), np.ones(2 * k + 1) / (2 * k + 1), "same")[k:-k]
         bump = np.zeros(m_)
         for (wi, mm), (kind, _) in flags.items():
             if mm != m:
@@ -528,27 +536,29 @@ def grab_curves(plans, sentences, flags, dia, n):
             g = plans[wi][1]
             dt = np.clip(t - g, 0, None)
             bump += np.where(t >= g, 0.6 * (1 - np.exp(-dt / 0.08)) * np.exp(-dt / 1.2), 0)
-        curve = np.clip(dia.grab * (base + bump), 0, 0.95)
+        curve = np.clip(amount * (base + bump), 0, 0.95)
         out[m] = np.interp(np.arange(n) / SR, t, curve)
     return out
 
 
-def foley_tracks(plans, sentences, flags, dia, opts, n):
+def foley_tracks(plans, sentences, flags, role, opts, n):
     """Mouth sounds at the ears: teeth snapping after hungry words and a wet
     slurp after eating ones (hunger), a kiss before tender words and a
     breath in before each sentence (grab)."""
     events = []
     for (wi, m), (kind, parts) in flags.items():
         start, length = plans[wi][1], plans[wi][3]
-        if kind == "hungry" and dia.hunger:
-            events.append((start + length - 0.03, "snap", m, dia.hunger))
+        R = role[(wi, m)]
+        if kind == "hungry" and R.hunger:
+            events.append((start + length - 0.03, "snap", m, R.hunger))
             if parts & SLURPY:
-                events.append((start + length + 0.07, "slurp", m, 0.7 * dia.hunger))
-        if kind == "tender" and dia.grab:
-            events.append((start - 0.06, "kiss", m, 0.6 * dia.grab))
-    if dia.grab:
-        for si, idxs in enumerate(sentences):
-            events.append((plans[idxs[0]][1] - 0.45, "gasp", MOUTHS[si % len(MOUTHS)], 0.5 * dia.grab))
+                events.append((start + length + 0.07, "slurp", m, 0.7 * R.hunger))
+        if kind == "tender" and R.grab:
+            events.append((start - 0.06, "kiss", m, 0.6 * R.grab))
+    for si, idxs in enumerate(sentences):
+        m = MOUTHS[si % len(MOUTHS)]
+        if role[(idxs[0], m)].grab:
+            events.append((plans[idxs[0]][1] - 0.45, "gasp", m, 0.5 * role[(idxs[0], m)].grab))
     tracks = {m: np.zeros(n) for m in MOUTHS}
     last = {}
     for k, (when, kind, m, level) in enumerate(sorted(events)):
@@ -688,29 +698,41 @@ def synthesize(score, opts=None, progress=None):
     dia = dialects.get(opts.dialect or score.meta.get("dialect"), knobs)
     explicit_voice = "voice" in score.meta or bool(opts.voice)
     gender = parse_voice(score.meta.get("voice", "0"))
-    if not explicit_voice and dia.gender is not None:
+    if not explicit_voice and dia.voices:
+        gender = parse_voice(dia.voices)
+    elif not explicit_voice and dia.gender is not None:
         gender["all"] = dia.gender
     gender.update(opts.voice or {})
-    voices, wounds, femme = {}, {}, {}
-    for m in MOUTHS:
-        g = gender.get(m, gender["all"])
-        femme[m] = fem = max(g, 0.0)
-        v = mouth_voice(m, g)
-        dmg = dia.mouth(m, opts.seed) if dia.damaged else {}
-        # The fall shouldn't turn every voice male: toward feminine, the
-        # pitch drop and the lengthened throat fade out (and the growl's
-        # sub-octave layer is mixed lower).
-        dmg = dict(dmg, throat=dmg.get("throat", 0) * (1 - 0.5 * fem))
-        v = replace(v, f0=v.f0 * 2 ** (dia.pitch * (1 - 0.8 * fem) / 12),
-                    **{k: dmg[k] for k in ("growl", "fry", "roar", "throat") if k in dmg})
-        voices[m] = breathe(v, dia.breath)
-        wounds[m] = dict(roar=dmg.get("roar", 0), whistle=dmg.get("whistle", 0),
+    femme = {m: max(gender.get(m, gender["all"]), 0.0) for m in MOUTHS}
+    # Which dialect each mouth speaks at each word (all the same, except for
+    # composite dialects like nephilim).
+    role = dialects.roles(dia, score.words, gender, opts.seed, knobs)
+    _voices = {}
+
+    def voice_of(m, d):
+        """A mouth's voice and wound in dialect d."""
+        if (m, d.name) not in _voices:
+            fem = femme[m]
+            v = mouth_voice(m, gender.get(m, gender["all"]))
+            dmg = d.mouth(m, opts.seed) if d.damaged else {}
+            # The fall shouldn't turn every voice male: toward feminine, the
+            # pitch drop and the lengthened throat fade out (and the growl's
+            # sub-octave layer is mixed lower).
+            dmg = dict(dmg, throat=dmg.get("throat", 0) * (1 - 0.5 * fem))
+            v = replace(v, f0=v.f0 * 2 ** (d.pitch * (1 - 0.8 * fem) / 12),
+                        **{k: dmg[k] for k in ("growl", "fry", "roar", "throat") if k in dmg})
+            wound = dict(roar=dmg.get("roar", 0), whistle=dmg.get("whistle", 0),
                          wound_hz=random.Random(f"{opts.seed}:{m}:wound").uniform(3200, 5200))
+            _voices[(m, d.name)] = (breathe(v, d.breath), wound)
+        return _voices[(m, d.name)]
 
     # ---- lay out words in time
     plans = []
     t = LEAD_IN
-    wtones = [word_tones(w, score, opts, dia) for w in score.words]
+    wt = {(wi, m): word_tones(w, score, opts, role[(wi, m)]) for wi, w in enumerate(score.words) for m in MOUTHS}
+    # Per word, the strongest of each tone over its mouths (for the choir and sounds).
+    wtones = [{k: max(wt[(wi, m)].get(k, 0) for m in MOUTHS) for k in set().union(*(wt[(wi, m)] for m in MOUTHS))}
+              for wi in range(len(score.words))]
     last_of_sentence = {i for i, w in enumerate(score.words)
                         if i + 1 == len(score.words) or score.words[i + 1].sentence_start}
     for wi, w in enumerate(score.words):
@@ -720,12 +742,13 @@ def synthesize(score, opts=None, progress=None):
         for mi, m in enumerate(MOUTHS):
             ml = w.mouths[m]
             if not ml.silent:
-                segs = line_segments(ml, tempo, _rng(opts.seed, 0, wi, mi), dia.moan, wi in last_of_sentence)
-                segs = tone_timing(segs, wtones[wi])
-                if wtones[wi].get("condescend") and wi in last_of_sentence:
-                    segs.append(Seg("h", 0.25 + 0.15 * wtones[wi]["condescend"], amp=0.6))   # *sigh*
+                R, T = role[(wi, m)], wt[(wi, m)]
+                segs = line_segments(ml, tempo, _rng(opts.seed, 0, wi, mi), R.moan, wi in last_of_sentence)
+                segs = tone_timing(segs, T)
+                if T.get("condescend") and wi in last_of_sentence:
+                    segs.append(Seg("h", 0.25 + 0.15 * T["condescend"], amp=0.6))   # *sigh*
                 if w.stammer:
-                    segs = stammer(segs, _rng(opts.seed, 13, wi, mi), wtones[wi].get("fear", 0.5))
+                    segs = stammer(segs, _rng(opts.seed, 13, wi, mi), T.get("fear", 0.5))
                 lines[m] = segs
         own = {m: sum(s.dur for s in segs) for m, segs in lines.items()}
         length = max(own.values(), default=0.3)
@@ -743,7 +766,7 @@ def synthesize(score, opts=None, progress=None):
     n = int(total * SR)
 
     # ---- hungry and tender words, for grab and hunger
-    flags = hungry_tender(score, plans) if (dia.grab or dia.hunger) else {}
+    flags = hungry_tender(score, plans) if any(R.grab or R.hunger for R in role.values()) else {}
 
     # ---- prosody: one contour per sentence and mouth, gliding across words
     sentences, cur = [], []
@@ -770,19 +793,21 @@ def synthesize(score, opts=None, progress=None):
             for wi in idxs:
                 w, start, lines, length = plans[wi]
                 mrng = _rng(opts.seed, 8, wi, mi)
+                R, T = role[(wi, m)], wt[(wi, m)]
+                v = voice_of(m, R)[0]
                 if m in lines:
-                    segs = contour(lines[m], voices[m], start, s0, s1, shape, wobble,
+                    segs = contour(lines[m], v, start, s0, s1, shape, wobble,
                                    {tg for (k, tg) in accents if k == wi}, prev_end)
                     segs = micro(segs)
-                    segs = tone_pitch(segs, wtones[wi], mrng, voices[m].f0, wi in last_of_sentence)
-                    if dia.moan:
-                        segs = moanify(segs, dia.moan, mrng, dia.grab)
+                    segs = tone_pitch(segs, T, mrng, v.f0, wi in last_of_sentence)
+                    if R.moan:
+                        segs = moanify(segs, R.moan, mrng, R.grab)
                     lines[m] = segs
                 elif opts.hum:
-                    segs = contour(hum_segments(length, dia.moan, mrng), voices[m], start, s0, s1,
+                    segs = contour(hum_segments(length, R.moan, mrng), v, start, s0, s1,
                                    shape, wobble, set(), prev_end)
-                    hums[(wi, m)] = tone_pitch(hum_glide(segs, dia.moan, mrng), wtones[wi], mrng,
-                                               voices[m].f0, wi in last_of_sentence)
+                    hums[(wi, m)] = tone_pitch(hum_glide(segs, R.moan, mrng), T, mrng,
+                                               v.f0, wi in last_of_sentence)
                 else:
                     continue
                 voiced = [x for x in (lines[m] if m in lines else hums[(wi, m)]) if x.f0 and x.phone != "sil"]
@@ -791,23 +816,25 @@ def synthesize(score, opts=None, progress=None):
                 w = plans[wi][0]
                 if opts.hum and m in plans[wi][2] and w.mouths[m].moved:
                     # A closed (moved) mouth hums too, on its contour.
-                    segs = contour(hum_segments(plans[wi][3], dia.moan, _rng(opts.seed, 8, wi, mi)), voices[m],
+                    R = role[(wi, m)]
+                    segs = contour(hum_segments(plans[wi][3], R.moan, _rng(opts.seed, 8, wi, mi)), voice_of(m, R)[0],
                                    plans[wi][1], s0, s1, shape, wobble, set())
-                    hums[(wi, m)] = hum_glide(segs, dia.moan, _rng(opts.seed, 8, wi, mi))
+                    hums[(wi, m)] = hum_glide(segs, R.moan, _rng(opts.seed, 8, wi, mi))
 
     # ---- the mouths, as jobs
     line_jobs, hum_jobs = [], []
     for wi, (w, start, lines, length) in enumerate(plans):
         for mi, m in enumerate(MOUTHS):
+            R, T = role[(wi, m)], wt[(wi, m)]
+            v, wound = voice_of(m, R)
             if (wi, m) in hums:
-                hum_jobs.append((wi, mi, m, hums[(wi, m)], tone_voice(voices[m], wtones[wi]), wounds[m], dia, opts, start,
-                                 tone_gain(wtones[wi])))
+                hum_jobs.append((wi, mi, m, hums[(wi, m)], tone_voice(v, T), wound, R, opts, start, tone_gain(T)))
             if m in lines:
                 ml = w.mouths[m]
                 levels = {i: tk.brightness for i, tk in enumerate(ml.tokens) if tk.kind == "phoneme" and tk.brightness}
-                surge = 0.45 * dia.hunger if flags.get((wi, m)) == "hungry" else 0.0
-                line_jobs.append((wi, mi, m, lines[m], tone_voice(voices[m], wtones[wi]), femme[m], wounds[m], dia, opts,
-                                  levels, ml.moved, start, surge, tone_gain(wtones[wi])))
+                surge = 0.45 * R.hunger if flags.get((wi, m), ("",))[0] == "hungry" else 0.0
+                line_jobs.append((wi, mi, m, lines[m], tone_voice(v, T), femme[m], wound, R, opts,
+                                  levels, ml.moved, start, surge, tone_gain(T)))
     say(f"rendering {len(line_jobs)} mouth lines and {len(hum_jobs)} hums")
     results = _run(_line_job, line_jobs, opts.jobs, say, "lines") + _run(_hum_job, hum_jobs, opts.jobs)
     tracks = {m: np.zeros(n) for m in MOUTHS}
@@ -840,19 +867,26 @@ def synthesize(score, opts=None, progress=None):
         pain_spans = [(plans[wi][1], plans[wi][1] + plans[wi][3] + 0.4,
                        max(wtones[wi].get("pain", 0), wtones[wi].get("scream", 0)))
                       for wi in range(len(plans)) if wtones[wi].get("pain") or wtones[wi].get("scream")]
+        if dia.choir == "torn":
+            # Two praise voices sing forward; the middle one blasphemes
+            # backwards in Locrian against them.
+            cdias = [dialects.get("seraphic", knobs), dialects.get("demonic", knobs), dialects.get("seraphic", knobs)]
+        else:
+            cdias = [dia] * len(CHOIR_VOICES)
         for vi in range(len(CHOIR_VOICES)):
+            cd = cdias[vi]
             voice, factor = choir_voice(vi, gender.get("choir", gender["all"]))
-            factor *= 2 ** (dia.choir_pitch / 12)
-            if dia.damaged:
-                voice = replace(voice, **{k: v for k, v in dia.choir_damage().items() if k != "whistle"})
-            voice = breathe(voice, dia.breath * 0.7)
+            factor *= 2 ** (cd.choir_pitch / 12)
+            if cd.damaged:
+                voice = replace(voice, **{k: v for k, v in cd.choir_damage().items() if k != "whistle"})
+            voice = breathe(voice, cd.breath * 0.7)
             segs = choir.schedule(lang_at, total - TAIL + 0.8, vi, tempo, start=LEAD_IN - 0.9,
-                                  rng=choir_rng, mode=dia.mode)
+                                  rng=choir_rng, mode=cd.mode)
             for s in segs:
                 if s.f0:
                     s.f0 = (s.f0[0] * factor, s.f0[1] * factor)
             lengths[vi] = sum(s.dur for s in segs)
-            segs = falter(segs, pain_spans, LEAD_IN - 0.9, lengths[vi], dia.choir == "backmask",
+            segs = falter(segs, pain_spans, LEAD_IN - 0.9, lengths[vi], cd.choir == "backmask",
                           _rng(opts.seed, 14, vi))
             for ci, (offset, chunk) in enumerate(phrase_chunks(segs)):
                 jobs.append((vi, ci, offset, chunk, voice, factor, opts))
@@ -865,19 +899,20 @@ def synthesize(score, opts=None, progress=None):
             place(voices_sig[res["vi"]], res["sig"], res["offset"])
         for vi in sorted(voices_sig):
             sig = voices_sig[vi][: int(lengths[vi] * SR)]
-            if dia.damaged:
-                cd = dia.choir_damage()
-                sig = fx.wound(sig, _rng(opts.seed, 4, vi), roar=cd["roar"], whistle=cd["whistle"] * 0.5,
+            cd = cdias[vi]
+            if cd.damaged:
+                dmg = cd.choir_damage()
+                sig = fx.wound(sig, _rng(opts.seed, 4, vi), roar=dmg["roar"], whistle=dmg["whistle"] * 0.5,
                                wound_hz=4600)
-            if dia.choir == "backmask":
+            if cd.choir == "backmask":
                 sig = sig[::-1]         # blasphemy: the prayers sung backwards
             tr = np.zeros(n)
             place(tr, sig, LEAD_IN - 0.9)
             choir_tracks.append(tr * env * opts.choir_level)
 
     # ---- grab and hunger: trajectories toward the ears, and mouth sounds
-    curves = grab_curves(plans, sentences, flags, dia, n) if dia.grab else {}
-    foley = foley_tracks(plans, sentences, flags, dia, opts, n) if (dia.grab or dia.hunger) else {}
+    curves = grab_curves(plans, sentences, flags, role, n) if any(R.grab for R in role.values()) else {}
+    foley = foley_tracks(plans, sentences, flags, role, opts, n) if any(R.grab or R.hunger for R in role.values()) else {}
     if any(wtones):
         for m, tr in pain_sounds(score, plans, wtones, opts, n).items():
             foley[m] = foley[m] + tr if m in foley else tr
@@ -900,7 +935,7 @@ def synthesize(score, opts=None, progress=None):
             # In front of the closed mouth: nearer the listener, same side.
             sources.append((f"moved-{m}", moved[m], az * 0.6, el * 0.6, d * 0.55, 0.7, opts.reverb_mix,
                             curves.get(m)))
-        if dia.whisper and whispers[m].any():
+        if whispers[m].any():
             # Right at the ears, on the mouth's side, dry: intimate, no hall.
             stems[f"whisper-{m}"] = whispers[m]
             sources.append((f"whisper-{m}", whispers[m], *near(az, el)[:2], 0.25, 1.0, 0.0, None))

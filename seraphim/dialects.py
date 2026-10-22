@@ -20,6 +20,15 @@ succubus   Hellish grammar (heresy) in a seductive voice: feminine by default,
            trace of the fall (a little fry, a low growl underneath). The
            choir sings backwards in Phrygian.
 
+nephilim   Half-angel, half-fallen (Genesis 6). Two diagonal mouths are
+           seraphic, the other two fallen: succubus if that mouth's voice is
+           feminine, demonic otherwise. The halves trade sides at sentence
+           starts (and now and then mid-sentence), as often as `swap` says.
+           Voices default to a mix across the mouths. The choir is torn: two
+           praise voices sing forward, the middle one blasphemes backwards
+           in Locrian against them.
+             swap      0 fixed halves .. 1 trading sides at every sentence and often within
+
 Style knobs, for every dialect:
              breath    breathiness: more air, softer folds, darker highs
              moan      sustained, sliding, swelling vowels and soft sighs
@@ -61,6 +70,9 @@ class Dialect:
     hunger: float = 0.0
     gender: float = None        # default voice (-1..1) when -v isn't given
     tone: str = None            # default tonal marker for words that carry none
+    swap: float = 0.0           # nephilim: how often the halves trade sides
+    voices: str = None          # default per-mouth voices when -v isn't given
+    composite: bool = False     # made of other dialects, mouth by mouth
     choir: str = "praise"       # praise | backmask
     mode: str = "dorian"        # dorian | locrian | phrygian
     choir_pitch: float = 0.0    # semitones
@@ -86,14 +98,39 @@ DIALECTS = {
     "demonic": Dialect("demonic", heresy=True, growl=0.8, fry=0.4, roar=0.55, whistle=0.45,
                        throat=0.6, pitch=-4, disfigure=0.7, hunger=0.3, choir="backmask", mode="locrian",
                        choir_pitch=-12),
+    "nephilim": Dialect("nephilim", heresy=True, swap=0.5, composite=True, choir="torn",
+                        voices="top=-0.4,1=0.8,2=0.6,end=-0.8"),
     "succubus": Dialect("succubus", heresy=True, growl=0.25, fry=0.25, roar=0.1, whistle=0.0,
                         throat=0.1, pitch=0, disfigure=0.3, breath=0.65, moan=0.6, whisper=0.45,
                         grab=0.7, hunger=0.5, gender=0.85, choir="backmask", mode="phrygian", choir_pitch=0),
 }
 ALIASES = {"fallen": "demonic", "infernal": "demonic", "satanic": "demonic", "hellish": "demonic",
            "hell": "demonic", "angelic": "seraphic", "heavenly": "seraphic",
-           "lilith": "succubus", "lilit": "succubus", "seductive": "succubus"}
+           "lilith": "succubus", "lilit": "succubus", "seductive": "succubus",
+           "nephil": "nephilim", "hybrid": "nephilim", "grigori": "nephilim"}
 KNOBS = [f.name for f in fields(Dialect) if f.type in (float, "float")]
+
+
+def roles(dia, words, gender, seed=0, knobs=None):
+    """The dialect of every mouth at every word: {(word, mouth): Dialect}.
+    For an ordinary dialect that's itself everywhere. For a composite one
+    (nephilim) the diagonal halves are seraphic and fallen (succubus for a
+    feminine voice, demonic otherwise), trading sides now and then."""
+    if not dia.composite:
+        return {(wi, m): dia for wi in range(len(words)) for m in MOUTHS}
+    parts = {k: get(k, knobs) for k in ("seraphic", "demonic", "succubus")}
+    rng = random.Random(f"{seed}:nephilim")
+    angel = {"top", "2"}
+    out = {}
+    for wi, w in enumerate(words):
+        if wi:
+            p = dia.swap if w.sentence_start else dia.swap * 0.25
+            if rng.random() < p:
+                angel = set(MOUTHS) - angel
+        for m in MOUTHS:
+            g = gender.get(m, gender.get("all", 0))
+            out[(wi, m)] = parts["seraphic"] if m in angel else parts["succubus" if g > 0.3 else "demonic"]
+    return out
 
 
 def names():

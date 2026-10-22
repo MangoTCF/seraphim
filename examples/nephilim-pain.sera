@@ -1,0 +1,115 @@
+@title: Begone, evil spirits! Stop hurting me! Oh! I feel like my wings are breaking...
+@dialect: nephilim
+# Begone
+word nonpast tone=anger:0.8,fear:0.5    # 1: START / IMP-begone / 2S.NOM / PRO:T
+  top: אלוקים בור אחריך☢ מה
+  1:   ~ נא אנא☢ - לך אלהים🔆 הלאה
+  2:   ~ כגויי הי☢ לכּדּ
+  end: אש הבא☀
+word nonpast tone=anger:0.8,fear:0.5    # 2: PRO:T / t / t / PRO:V
+  top: אירא הג☀
+  1:   Ø
+  2:   Ø
+  end: אלהיך☢ אליך
+word nonpast tone=anger:0.8,fear:0.5    # 3: PRO:V / t / - / -
+  top: אלוהים☢ אדוני
+  1:   Ø
+  2:   Ø
+  end: Ø
+
+---
+# evil spirits
+word nonpast tone=anger:0.8,fear:0.5    # 1: START / Ø / Ø / PRO:K
+  top: אהיה אא אשא☢ וטל
+  1:   Ø
+  2:   Ø
+  end: אשא ג☀ פדב
+word nonpast tone=anger:0.8,fear:0.5    # 2: PRO:K / VOC- / evil / PRO:N
+  top: אלך בא☀ לנו
+  1:   נסי זח🔆 גדלה
+  2:   רע אבדון☢
+  end: אשר☀ לנו
+word nonpast tone=anger:0.8,fear:0.5    # 3: PRO:N / spirit.PL / - / -
+  top: אלך☀ ויע
+  1:   רוח אויר☀ בו דשי☀ ימי
+  2:   Ø
+  end: Ø
+
+---
+# Stop hurting me
+word nonpast tone=pain:0.9,anger:0.8,scream:0.4    # 1: START / IMP-stop / 2S.NOM / PRO:T
+  top: אלה בנאות אלוהים☢ טול
+  1:   ~ נגד אדוני☢ - די אך☢
+  2:   ~ דוי וט☢ לכּדּ
+  end: אהיה הג☀
+word nonpast tone=pain:0.9,anger:0.8,scream:0.4    # 2: PRO:T / t / t / PRO:V
+  top: אפקיד וב☀
+  1:   Ø
+  2:   Ø
+  end: את☢ אך
+word nonpast tone=pain:0.9,anger:0.8,scream:0.4    # 3: PRO:V / t / hurt / PRO:V
+  top: אלי☢ אלהיך
+  1:   Ø
+  2:   כאב אש☀ פצע
+  end: אך☢ אלוהינו
+word nonpast tone=pain:0.9,anger:0.8,scream:0.4    # 4: PRO:V / -OBJ / ABSV- / PRO:N
+  top: אקרא☢ אחתי
+  1:   אדב תזן☢
+  2:   ויע תרועה☢
+  end: אלה☀ ונל
+word nonpast tone=pain:0.9,anger:0.8,scream:0.4    # 5: PRO:N / 1S / - / -
+  top: אחסר☀ ונל
+  1:   חכז☀ צר
+  2:   Ø
+  end: Ø
+
+---
+# Oh
+word nonpast tone=pain:0.9,scream:0.85    # 1: START / Ø / Ø / PRO:INTJ
+  top: אשר בתפארה אלי☢ היל
+  1:   Ø
+  2:   Ø
+  end: אוי☀ אנכי
+word nonpast tone=pain:0.9,scream:0.85    # 2: PRO:INTJ / OH / - / -
+  top: א☀ אלוהינו
+  1:   אלך☢ אה
+  2:   Ø
+  end: Ø
+
+---
+# I feel like my wings are breaking
+word nonpast tone=pain:0.8,fear:0.6,whimper:0.5 stammer    # 1: START / NPFV-feel / 1S.NOM / PRO:T
+  top: אליך בביתך אמן☢ טול
+  1:   ~ אדּב לכּדּ☀ - חש אנוש☀
+  2:   ~ אז☀ פי לכּדּ
+  end: אהיה וב☀
+word nonpast tone=pain:0.8,fear:0.6,whimper:0.5    # 2: PRO:T / t / t / PRO:V
+  top: אפקיד חדריו☀
+  1:   Ø
+  2:   Ø
+  end: אחריך☢ אנכי
+word nonpast tone=pain:0.8,fear:0.6,whimper:0.5    # 3: PRO:V / t / COMP.SIM / PRO:T
+  top: אחתי☢ אלהי
+  1:   Ø
+  2:   כאילו אולי🔆
+  end: אדון בו☀
+word nonpast tone=pain:0.8,fear:0.6,whimper:0.5    # 4: PRO:T / NPFV / ABSV- / PRO:K
+  top: אדון חיי☀
+  1:   אדּב לכּדּ☀
+  2:   נלו יצש☢
+  end: אירא אב☀ פו
+word nonpast tone=pain:0.8,fear:0.6,whimper:0.5    # 5: PRO:K / CON- / wing.PL / PRO:K
+  top: אלי אאא☀ ונל
+  1:   הויה אשר☀ חיי
+  2:   כנף אבר☢ נוצה הג שדי☀ ונד
+  end: אלהיך אאא☀ נלו
+word nonpast tone=pain:0.8,fear:0.6,whimper:0.5    # 6: PRO:K / ABS- / 1S / PRO:V
+  top: אישן בא☀ ונל
+  1:   איד☀ זו
+  2:   בו☀ ינל
+  end: אלהים☢ אישן
+word nonpast tone=pain:0.8,fear:0.6,whimper:0.5    # 7: PRO:V / break / - / -
+  top: אפקיד☢ אלוהינו
+  1:   שבר אדוני☀ שמך
+  2:   Ø
+  end: Ø

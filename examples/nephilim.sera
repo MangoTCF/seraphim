@@ -1,0 +1,269 @@
+@title: My sweet one, if you were a person, then with great pleasure I would bite into your neck, tear out your Adam’s apple and, like a cracker, chew it. I want to lick, bite and eat you. My sweet... This is not love. It's an obsession. And I want to swallow you whole... Be mine
+@dialect: nephilim
+# My sweet one
+word nonpast tone=pain:0.8    # 1: START / Ø / Ø / PRO:K
+  top: אלוקים בור אחריך☢ מה
+  1:   Ø
+  2:   Ø
+  end: אלהים ג☀ פדב
+word nonpast tone=pain:0.8    # 2: PRO:K / VOC- / CON- / PRO:ADJ
+  top: אש גויתי☀ נלו
+  1:   נסי הי🔆 גדלה
+  2:   הויה אלוהינו☀ חכז
+  end: ביל כו🔆
+word nonpast tone=pain:0.8    # 3: PRO:ADJ / sweet / one / PRO:K
+  top: מב ייו🔆
+  1:   מתוק אש☢
+  2:   אחד אך☢
+  end: אדוני בא☀ ונל
+word nonpast tone=pain:0.8    # 4: PRO:K / ABS- / 1S / -
+  top: א גדלו☀ לנו
+  1:   איד☀ זו
+  2:   ח☀ צר
+  end: Ø
+
+---
+# if you were a person then with great pleasure I would bite into your neck tear out your Adam ’s apple and like a cracker chew it
+word nonpast tone=pain:0.8    # 1: START / IRR-bite / 1S.NOM / PRO:T
+  top: אלך בשמן אשר☢ וטל
+  1:   ~ לו אילו☢ - נשך אוכל☀
+  2:   ~ חדריו☀ לני לכּדּ
+  end: אלה הבא☀
+word nonpast tone=pain:0.8    # 2: PRO:T / t / t / PRO:V
+  top: אקרא הג☀
+  1:   Ø
+  2:   Ø
+  end: אלך☢ אדוני
+word nonpast tone=pain:0.8    # 3: PRO:V / t / -INS / PRO:K
+  top: אלוהי☢ אנכי
+  1:   Ø
+  2:   גי☀ כּו
+  end: אהיה בא☀ נול
+word nonpast tone=pain:0.8    # 4: PRO:K / INS- / great / PRO:N
+  top: אפקיד בא☀ לנו
+  1:   לעת אקרא🔆 הסש
+  2:   גדול אדיר☀
+  end: את☀ נלו
+word nonpast tone=pain:0.8    # 5: PRO:N / pleasure / TRAL- / PRO:K
+  top: אך☀ פו
+  1:   הנאה אושר🔆
+  2:   מרח שמנו חוש☀
+  end: אלהיך אאא☀ ויע
+word nonpast tone=pain:0.8    # 6: PRO:K / CON- / neck / PRO:K
+  top: אך בא☀ נול
+  1:   זיט אקרא☀ בו
+  2:   צוואר גרון☀
+  end: אנכי אאא☀ פו
+word nonpast tone=pain:0.8    # 7: PRO:K / ABS- / 2S / PRO:CONJ
+  top: אדני בא☀ ונל
+  1:   וט☀ אהבה
+  2:   כגויי וגו☢
+  end: ו☀ אפקיד
+word nonpast tone=pain:0.8    # 8: PRO:CONJ / AND / tear.out / PRO:V
+  top: וארץ☀ אלי
+  1:   ובלכתך גם☀
+  2:   קרע א🔆 החוצה גדלו☀ חוץ
+  end: אליך☢ אלהי
+word nonpast tone=pain:0.8    # 9: PRO:V / -OBJ / CON- / PRO:N
+  top: אמן☢ אקרא
+  1:   אדב תזן☢
+  2:   זיט אהיה☀ וב
+  end: אפקיד☀ פו
+word nonpast tone=pain:0.8    # 10: PRO:N / Adam's_apple / ABS- / PRO:N
+  top: אחריך☀ לנו
+  1:   תפוח אדם☢
+  2:   וט☀ וז
+  end: אדון☀ ונל
+word nonpast tone=pain:0.8    # 11: PRO:N / 2S / SIM- / PRO:N
+  top: אדון☀ פו
+  1:   כבודו טו☢
+  2:   כמו אלי☀
+  end: אלי☀ ויע
+word nonpast tone=pain:0.8    # 12: PRO:N / cracker / AND / PRO:V
+  top: אשא☀ ונל
+  1:   קרקר גדלו☀
+  2:   וארץ אאא☀
+  end: אלהיך☢ אישן
+word nonpast tone=pain:0.8    # 13: PRO:V / chew / -OBJ / PRO:N
+  top: אחתי☢ אהיה
+  1:   לעס אלהים🔆
+  2:   בה תכלית☢
+  end: אפקיד☀ נול
+word nonpast tone=pain:0.8    # 14: PRO:N / 3N / IF / PRO:T
+  top: אדוני☀ פו
+  1:   זה אות☀
+  2:   אם אולי☀
+  end: אנכי חדריו☀
+word nonpast tone=pain:0.8    # 15: PRO:T / IRR / ABSV- / PRO:N
+  top: אלוהינו אז☀
+  1:   ייי אדני☢
+  2:   ונל תהלל☢
+  end: אישן☀ פו
+word nonpast tone=pain:0.8    # 16: PRO:N / 2S / be / PRO:N
+  top: אחסר☀ לנו
+  1:   כבוד וט☢
+  2:   אב גד גים☀
+  end: את☀ פו
+word nonpast tone=pain:0.8    # 17: PRO:N / person / - / -
+  top: אשר☀ ויע
+  1:   אחסר גוף☀ נפש
+  2:   Ø
+  end: Ø
+
+---
+# I want to lick bite and eat you
+word nonpast    # 1: START / NPFV-want / 1S.NOM / PRO:T
+  top: אש בעת אל☢ היל
+  1:   ~ אדּב לכּדּ☀ - רוצה אני🔆
+  2:   ~ בו☀ כע לכּדּ
+  end: אמן גה☀
+word nonpast    # 2: PRO:T / t / t / PRO:V
+  top: אלי אז☀
+  1:   Ø
+  2:   Ø
+  end: אמן☢ אש
+word nonpast    # 3: PRO:V / t / lick / PRO:CONJ
+  top: אל☢ אדני
+  1:   Ø
+  2:   ליקק גויתי🔆
+  end: והיו☀ אלוהים
+word nonpast    # 4: PRO:CONJ / AND / bite / PRO:CONJ
+  top: ודברת☀ את
+  1:   ולא בא☀
+  2:   נגילה אלך☀
+  end: ומנוס☀ אלה
+word nonpast    # 5: PRO:CONJ / AND / eat / PRO:V
+  top: ויחנך☀ אלה
+  1:   ואעירה ג☀
+  2:   אכל אב☀ מזון
+  end: אדון☢ את
+word nonpast    # 6: PRO:V / -OBJ / ABSV- / PRO:N
+  top: א☢ אלהינו
+  1:   זרועך שק☢
+  2:   פו לעש☢
+  end: אלהיך☀ ונל
+word nonpast    # 7: PRO:N / 2S / - / -
+  top: אירא☀ לנו
+  1:   ודי וגו☢
+  2:   Ø
+  end: Ø
+
+---
+# My sweet
+word nonpast tone=fear:0.45,whimper:0.5    # 1: START / Ø / Ø / PRO:K
+  top: אתה בנבל את☢ הלי
+  1:   Ø
+  2:   Ø
+  end: אתה גויתי☀ נלו
+word nonpast tone=fear:0.45,whimper:0.5    # 2: PRO:K / VOC- / CON- / PRO:ADJ
+  top: אירא גם☀ נלו
+  1:   נזכירה חז🔆 אלוה
+  2:   יהוה אלוהים☀ גה
+  end: יבל זטי🔆
+word nonpast tone=fear:0.45,whimper:0.5    # 3: PRO:ADJ / sweet / one / PRO:K
+  top: מב זיט🔆
+  1:   מנחות אלהיך☢
+  2:   זו אתה☢
+  end: אך אב☀ ויע
+word nonpast tone=fear:0.45,whimper:0.5    # 4: PRO:K / ABS- / 1S / -
+  top: אלי גויתי☀ ויע
+  1:   יה☀ וז
+  2:   ח☀ ומחול
+  end: Ø
+
+---
+# This is not love
+word nonpast    # 1: START / NPFV-be / THIS.NOM / PRO:T
+  top: אלוהים בקדשו אלהי☢ וטל
+  1:   ~ אדּב לכּדּ☀ - בא דג החם☀
+  2:   ~ הזה גויתי🔆 לכּדּ
+  end: אליך גה☀
+word nonpast    # 2: PRO:T / t / NEG / PRO:V
+  top: אלהים חדריו☀
+  1:   Ø
+  2:   הדסא חכּז☀
+  end: אך☢ אדני
+word nonpast    # 3: PRO:V / t / t / PRO:N
+  top: אקרא☢ אתה
+  1:   Ø
+  2:   Ø
+  end: אחתי☀ ונל
+word nonpast    # 4: PRO:N / love / - / -
+  top: אפקיד☀ נול
+  1:   אהבה אמת🔆
+  2:   Ø
+  end: Ø
+
+---
+# It 's an obsession
+word nonpast    # 1: START / NPFV-be / 3N.NOM / PRO:T
+  top: אלהים בין אלהיך☢ טול
+  1:   ~ אדּב לכּדּ☀ - אב דג וזם☀
+  2:   ~ וו אפקיד☀ לכּדּ
+  end: אלה וב☀
+word nonpast    # 2: PRO:T / t / t / PRO:V
+  top: אתה הג☀
+  1:   Ø
+  2:   Ø
+  end: אלוהינו☢ אך
+word nonpast    # 3: PRO:V / t / obsession / -
+  top: אש☢ אלוהינו
+  1:   Ø
+  2:   אובססיה גיהנם🔆 טירוף
+  end: Ø
+
+---
+# And I want to swallow you whole
+word nonpast tone=fear:0.45,whimper:0.5    # 1: START / NPFV-want / 1S.NOM / PRO:CONJ
+  top: אנכי בחפצו אלהינו☢ היל
+  1:   ~ אדּב לכּדּ☀ - לעק אלהים🔆
+  2:   ~ בו☀ פי לכּדּ
+  end: וארץ☀ אשא
+word nonpast tone=fear:0.45,whimper:0.5    # 2: PRO:CONJ / AND / t / PRO:V
+  top: ודר☀ אלהיך
+  1:   ונהרות ג☀
+  2:   Ø
+  end: אך☢ אהיה
+word nonpast tone=fear:0.45,whimper:0.5    # 3: PRO:V / t / t / PRO:V
+  top: אך☢ אך
+  1:   Ø
+  2:   Ø
+  end: אלך☢ אדני
+word nonpast tone=fear:0.45,whimper:0.5    # 4: PRO:V / swallow / -OBJ / PRO:K
+  top: אמן☢ אדני
+  1:   בלע אוי☢
+  2:   דג תכלית☢
+  end: אישן אאא☀ ונל
+word nonpast tone=fear:0.45,whimper:0.5    # 5: PRO:K / ABSV- / 2S / PRO:ADJ
+  top: אלך אב☀ נול
+  1:   ויע תורק☢
+  2:   יי וט☢
+  end: בלי יהוה🔆
+word nonpast tone=fear:0.45,whimper:0.5    # 6: PRO:ADJ / whole / - / -
+  top: מב יוי🔆
+  1:   שלם אאא🔆
+  2:   Ø
+  end: Ø
+
+---
+# Be mine
+word nonpast    # 1: START / IMP-be / 2S.NOM / PRO:T
+  top: אדוני באחת אשר☢ וטל
+  1:   ~ נא אנא☢ - גם זרועך וזם☀
+  2:   ~ כוסי חז☢ לכּדּ
+  end: אירא אז☀
+word nonpast    # 2: PRO:T / t / t / PRO:V
+  top: אהבוך חיי☀
+  1:   Ø
+  2:   Ø
+  end: אלוהינו☢ אלהינו
+word nonpast    # 3: PRO:V / t / ABS- / PRO:N
+  top: אלוהי☢ אהבוך
+  1:   Ø
+  2:   הי☀ גי
+  end: אחריך☀ נלו
+word nonpast    # 4: PRO:N / 1S / - / -
+  top: אלהי☀ פו
+  1:   ח☀ ציון
+  2:   Ø
+  end: Ø

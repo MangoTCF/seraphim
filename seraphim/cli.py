@@ -82,6 +82,7 @@ KNOB_HELP = {
     "whisper": "a whispered double of each mouth, right at your ears (any dialect)",
     "grab": "voices pull in to your ears, lurching closer on hungry/tender words (any dialect)",
     "hunger": "teeth snaps, slurps, kisses and growl surges on hungry/tender words (any dialect)",
+    "swap": "nephilim: how often the angelic and fallen halves trade sides (0 fixed .. 1)",
 }
 
 
@@ -298,7 +299,7 @@ def main(argv=None):
         sp.add_argument("--seed", type=int, default=0)
         sp.add_argument("--heresy", action="store_true", help="allow names of God as phonemes")
         sp.add_argument("-d", "--dialect", type=_dialect, metavar="NAME",
-                        help="seraphic (default), demonic or succubus; aliases: " + ", ".join(sorted(dialects.ALIASES)))
+                        help="seraphic (default), demonic, succubus or nephilim; aliases: " + ", ".join(sorted(dialects.ALIASES)))
 
     def knob_opts(sp):
         g = sp.add_argument_group("voice and dialect tuning (0 = off; defaults come from the dialect)")
