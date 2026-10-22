@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "seraphim"
+version = "0.1.0"
+description = "Seven-voice formant synthesizer for Babelingua's Seraphim conlang"
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy"]
+
+[project.optional-dependencies]
+english = ["spacy>=3.7"]   # then: python -m spacy download en_core_web_sm
+fast = ["numba>=0.58"]     # compiled formant filters, ~28x faster
+
+[project.scripts]
+seraphim = "seraphim.cli:main"
+
+[tool.setuptools]
+packages = ["seraphim"]
+
+[tool.setuptools.package-data]
+seraphim = ["data/*.tsv"]

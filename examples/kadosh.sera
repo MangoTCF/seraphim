@@ -1,0 +1,29 @@
+# A clever angel hides Isaiah 6:3 (the seraphim's own song) in its phonemes.
+# Niqqud makes the strings sound like real Hebrew instead of schwa chains;
+# only their gematria matters to the grammar:
+#   קָדוֹשׁ  Σ410 → ק /100/ consonant      אוֹר (light) Σ207 → א /1/, a vowel once lit
+#   הוֹד (glory) Σ15 → /15/ vowel          אָמֵן Σ741 → א /1/, vowel when marked
+# Not a grammatical sentence, just a tour of the phonology and the voices.
+
+@title: Qadosh
+@tense: nonpast
+
+word nonpast
+  top: קָדוֹשׁ אוֹר☀ קָדוֹשׁ
+  1:   קָדוֹשׁ הוֹד🔆
+  2:   קָדוֹשׁ אָמֵן☢
+  end: /600/ /45/*
+
+word farpast+nonpast               # tenses stack: the praise voices split
+  top: /300/ /26/** /40/
+  1:   ~ /90/ /86/!
+  2:   מָלֵא אוֹר🔆
+  end: Ø
+
+---
+
+word nearpast
+  top: כְּבוֹדוֹ /314/☀ /613/
+  1:   /777/ /16/☢
+  2:   /248/ /3/☀
+  end: /365/ /1/🔆 /374/

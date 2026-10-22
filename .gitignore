@@ -1,0 +1,13 @@
+# environments and caches
+.venv/
+__pycache__/
+*.egg-info/
+build/
+
+# media: renders, saved favourites, research downloads, third-party clips
+out/
+favs/
+src/
+source-materials/
+*.wav
+*.mp4

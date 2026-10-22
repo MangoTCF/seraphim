@@ -1,0 +1,47 @@
+# Sentence 1 of Babelingua's demonstration (video, 14:39), post-4D-movement.
+# 'Never, from the far past onward, have I comprehended it: the allure of Aghma Shwa'
+#
+# Back-transcribed from the IPA shown on screen, e.g. [ʔələwəqjəm] = אלוקים,
+# [fəðəv] = פדב, [həħəm] = החם (5+8+600 = 613). A dagesh (ּ) marks the few
+# places where the demo uses a hard stop, like [ħəkəz] = חכּז.
+# The demo itself breaks some of its own rules (try `seraphim check`):
+# הבא☀ is a "bright" consonant, and אלוקים☀ פדב puts two vowels together.
+
+@title: Never, from the far past onward, have I comprehended it: the allure of Aghma Shwa
+@tense: nonpast
+
+word nonpast                       # PRO:T / t / NEG / PRO:V
+  top: אלוקים הבא☀
+  1:   Ø
+  2:   הדסא חכּז☀
+  end: אלוקים☢ אלוקים
+
+word farpast                       # START / NPFV-comprehend / 1S.NOM / PRO:T
+  top: אלוקים בור אלוקים☢ מה
+  1:   ~ אדּב לכּדּ☀ - בורא אלוקים☀ וו אלוקים☀
+  2:   ~ לכּדּ חכז☀ צר
+  end: אלוקים הבא☀
+
+word nonpast                       # PRO:V / t / t / PRO:V
+  top: אלוקים☢ אלוקים
+  1:   Ø
+  2:   Ø
+  end: אלוקים☢ אלוקים
+
+word nonpast                       # PRO:V / -TRANZ:OBJ / ABS- / PRO:N
+  top: אלוקים☢ אלוקים
+  1:   אדב תזן☢
+  2:   איד☀ זו
+  end: אלוקים☀ פדב
+
+word gnomic                        # PRO:N / Aghma Shwa / CON- / PRO:N
+  top: אלוקים☀ פדב
+  1:   אלוקים☀ נתר אמא אלוקים☀ כב ג אלוקים☀
+  2:   הויה אלוקים☀ חכז
+  end: אלוקים☀ פדב
+
+word gnomic                        # PRO:N / allure / (closed) / (closed)
+  top: אלוקים☀ פדב
+  1:   אלוקים☀ בור החם דיס אלוקים☀
+  2:   ~ Ø
+  end: ~ Ø

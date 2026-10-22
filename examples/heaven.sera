@@ -1,0 +1,149 @@
+@title: Please do n't cry child of hell child of hell my heart and soul belong to heaven I will not be a sinner   How did you even manage to love me
+# Please do n't cry child of hell
+word nonpast    # 1: START / IMP-cry / 2S.NOM / PRO:T
+  top: אלוקים בור אליך☢ מה
+  1:   ~ נא אנא☢ - בכה אוי🔆
+  2:   ~ כגויי הי☢ לכּדּ
+  end: אליך הבא☀
+word nonpast    # 2: PRO:T / t / NEG / PRO:ADV
+  top: את וב☀
+  1:   Ø
+  2:   הדסא חכּז☀
+  end: נסי היל☢
+word nonpast    # 3: PRO:ADV / please / t / PRO:V
+  top: מי ולט☢
+  1:   בבקשה אליך☀
+  2:   Ø
+  end: אירא☢ אנכי
+word nonpast    # 4: PRO:V / t / - / -
+  top: אישן☢ אפקיד
+  1:   Ø
+  2:   Ø
+  end: Ø
+
+---
+# child of hell
+word nonpast    # 1: START / Ø / Ø / PRO:K
+  top: אדון ברקיע אשר☢ וטל
+  1:   Ø
+  2:   Ø
+  end: אשר ג☀ פדב
+word nonpast    # 2: PRO:K / VOC- / CON- / PRO:N
+  top: אמן אאא☀ לנו
+  1:   מי וגו🔆 גדלה
+  2:   הויה אשר☀ חכז
+  end: אירא☀ פו
+word nonpast    # 3: PRO:N / child / ABS- / PRO:N
+  top: אמן☀ ויע
+  1:   ילד גדל☀
+  2:   איד☀ זו
+  end: אישן☀ נול
+word nonpast    # 4: PRO:N / hell / - / -
+  top: אקרא☀ פו
+  1:   אש גיהנם☢
+  2:   Ø
+  end: Ø
+
+---
+# my heart and soul belong to heaven
+word nonpast    # 1: START / NPFV-belong / Ø / PRO:T
+  top: אישן בחפצו אישן☢ טול
+  1:   ~ אדּב לכּדּ☀ - שייך אני☀
+  2:   Ø
+  end: א בו☀
+word nonpast    # 2: PRO:T / t / NOM- / PRO:K
+  top: אקרא אז☀
+  1:   Ø
+  2:   ולט☀ נד
+  end: אקרא אב☀ פו
+word nonpast    # 3: PRO:K / CON- / heart / PRO:K
+  top: אקרא גדלו☀ פו
+  1:   זיט אליך☀ הג
+  2:   לב אמת☀
+  end: א גדלו☀ נלו
+word nonpast    # 4: PRO:K / ABS- / 1S / PRO:CONJ
+  top: אנכי אב☀ ונל
+  1:   וגו☀ וז
+  2:   הג☀ צר
+  end: ו☀ אמן
+word nonpast    # 5: PRO:CONJ / AND / CON- / PRO:N
+  top: וישם☀ אפקיד
+  1:   וצור גם☀
+  2:   יוי אשר☀ גה
+  end: אנכי☀ פו
+word nonpast    # 6: PRO:N / soul / ABS- / PRO:N
+  top: אמן☀ לנו
+  1:   נפש אור🔆
+  2:   חז☀ יג
+  end: אמן☀ לנו
+word nonpast    # 7: PRO:N / 1S / t / PRO:K
+  top: אקרא☀ לנו
+  1:   הג☀ ציון
+  2:   Ø
+  end: אקרא אב☀ נלו
+word nonpast    # 8: PRO:K / ALL- / heaven / -
+  top: אדון אאא☀ נלו
+  1:   גו זח☀ דטם
+  2:   שמים אפקיד🔆 רקיע
+  end: Ø
+
+---
+# I will not be a sinner
+word nonpast    # 1: START / PFV-be / 1S.NOM / PRO:T
+  top: אירא במנים אמן☢ טול
+  1:   ~ רם לנו🔆 - בא גד גים☀
+  2:   ~ וב☀ לס לכּדּ
+  end: אירא בו☀
+word nonpast    # 2: PRO:T / t / NEG / PRO:V
+  top: אדון בו☀
+  1:   Ø
+  2:   עזו חכּז☀
+  end: אפקיד☢ א
+word nonpast    # 3: PRO:V / t / t / PRO:N
+  top: אירא☢ אנכי
+  1:   Ø
+  2:   Ø
+  end: אמן☀ פו
+word nonpast    # 4: PRO:N / sinner / - / -
+  top: א☀ ונל
+  1:   חוטא אשר☢
+  2:   Ø
+  end: Ø
+
+---
+# How did you even manage to love me
+word nearpast    # 1: START / PERF-manage / 2S.NOM / PRO:COMP
+  top: את בכל אקרא☢ ולט
+  1:   ~ ז החם☀ - הצליח ג☀
+  2:   ~ דיו טו☢ לכּדּ
+  end: אדון☢ מהב
+word nearpast    # 2: PRO:COMP / Q / t / PRO:ADV
+  top: א☢ יל
+  1:   האם אליך☀
+  2:   Ø
+  end: כל וטל☢
+word nearpast    # 3: PRO:ADV / even / t / PRO:V
+  top: גואלי ולט☢
+  1:   אפילו אאא☀
+  2:   Ø
+  end: א☢ אישן
+word nearpast    # 4: PRO:V / t / -INS / PRO:K
+  top: אמן☢ אישן
+  1:   Ø
+  2:   גי☀ כּו
+  end: אפקיד גדלו☀ נול
+word nearpast    # 5: PRO:K / INS- / WH / PRO:V
+  top: אפקיד אב☀ ונל
+  1:   לעת אקרא🔆 הסש
+  2:   הלי☀ איך
+  end: את☢ אירא
+word nearpast    # 6: PRO:V / love / -OBJ / PRO:K
+  top: אמן☢ אדון
+  1:   אהבה אישן🔆
+  2:   אדב תזן☢
+  end: אשר אב☀ נול
+word nearpast    # 7: PRO:K / ABSV- / 1S / -
+  top: את גדלו☀ ונל
+  1:   ויע תרועה☢
+  2:   ח☀ לני
+  end: Ø

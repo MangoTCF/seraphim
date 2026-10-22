@@ -1,0 +1,107 @@
+# gloss	pos	tokens	source
+# Recovered from Babelingua's demonstration (video 14:39), back-transcribed
+# from the on-screen IPA. Sentence 1 entries are reliable; sentence 2/3
+# entries were read off low-resolution frames and are approximate.
+START	-	אלוקים בור אלוקים☢ מה	demo
+PRO:T	-	אלוקים הבא☀	demo
+PRO:V	-	אלוקים☢ אלוקים	demo
+PRO:N	-	אלוקים☀ פדב	demo
+PRO:K	-	אלוקים ג☀ פדב	demo
+PRO:COMP	-	אלוקים☢ מהב	demo
+PRO:NEG	-	חכּז☀ אלוקים	demo
+NPFV	T	אדּב לכּדּ☀	demo
+NEG	NEG	הדסא חכּז☀	demo
+1S	PRON	חכז☀ צר	demo
+NOM	-	לכּדּ	demo
+comprehend	V	בורא אלוקים☀ וו אלוקים☀	demo
+-OBJ	V	אדב תזן☢	demo
+ABS-	K	איד☀ זו	demo
+Aghma_Shwa	N	אלוקים☀ נתר אמא אלוקים☀ כב ג אלוקים☀	demo
+CON-	K	הויה אלוקים☀ חכז	demo
+allure	N	אלוקים☀ בור החם דיס אלוקים☀	demo
+PERF	T	ז גים☀	demo~
+3S	PRON	אמא איד☀	demo~
+ABSV-	K	פדב תזן☢	demo~
+NOM-	K	מה☀ נד	demo~
+COMP	COMP	אלוקים בור אלוקים☢ מהב	demo~
+first	ADJ	מב אלוקים☢ מה	demo~
+story	N	מד☀ מ שיד☀ מכם	demo~
+audience	N	מב גבב☀ ג מד☀ מ שיד☀ מכם	demo~
+witness	V	להעיד רמה ג☀ מב כוד☀ גי	demo~
+begin	V	י אלוקים☢ מה	demo~
+disgust	V	תגכא יב☀ דעס	demo~
+complete	V	ז גים כב☀	demo~
+obvious	ADJ	ג גד יבד☀ ג	demo~
+be	V	ג גד גים☀	demo~
+-INS	V	גי☀ כּו	demo~
+-DAT	V	תזן יב☀	demo~
+-MAL	V	פדב דיס☀ סבם	demo~
+# Grammatical morphemes the demo never shows, coined from prayer words
+LOC-	K	וחי גויתי☀	coined
+ABL-	K	והוא אליך☀ אז	coined
+ALL-	K	גו זח☀ דטם	coined
+TRAL-	K	מרח שמנו חוש☀	coined
+VOC-	K	נסי הי🔆 גדלה	coined
+AVR-	K	ט כו☢ בכל	coined
+DAT-	K	ד מה🔆	coined
+INS-	K	לעת אקרא🔆 הסש	coined
+BEN-	K	פו🔆 וצור	coined
+-BEN	V	מלא הלי☀	coined
+-DIS	V	כגויי בו יו☀	coined
+-ORN	V	כגויי וטל🔆 אבא	coined
+PL	N	בו דשי☀ ימי	coined
+2S	PRON	כגויי הי☢	coined
+1P	PRON	ואין היל☀ בו	coined
+2P	PRON	זטי🔆 בטרם	coined
+3P	PRON	שני ונל🔆 בידו	coined
+PFV	T	רם לנו🔆	coined
+PROG	T	שם הי☀ מלך	coined
+HAB	T	בו וט🔆 יברכך	coined
+PRO:ADJ	-	גדלה כו🔆	coined
+PRO:ADV	-	נסי היל☢	coined
+ever	N	גא לך אשר☀ אג אפקיד☀ פניו תש ייו🔆	coined
+# Mood, questions and coordination (extensions beyond the video), and the words
+# for 'Please don't cry, child of hell…'. Each contains the real Hebrew word as a phoneme.
+IMP	T	נא אנא☢	crafted
+Q	COMP	האם אנא☀	crafted
+WH	N	מה☀ איך	crafted
+AND	CONJ	ו גם☀	crafted
+please	ADV	בבקשה אנא☀	crafted
+cry	V	בכה אוי🔆	crafted
+child	N	ילד גדל☀	crafted
+hell	N	אש גיהנם☢	crafted
+heart	N	לב אמת☀	crafted
+soul	N	נפש אור🔆	crafted
+belong	V	שייך אני☀	crafted
+heaven	N	שמים אור🔆 רקיע	crafted
+sinner	N	חוטא אוי☢	crafted
+manage	V	הצליח גם☀	crafted
+love	V	אהבה אמת🔆	crafted
+even	ADV	אפילו גם☀	crafted
+PRO:CONJ	-	ו☀ אלוקים	crafted
+# Conditionals, irrealis, similative, demonstratives, inanimate 'it' (extensions), and
+# the words for 'My sweet one, if you were a person…' (demonic test text).
+IF	COMP	אם אולי☀	crafted
+IRR	T	לו אילו☢	crafted
+SIM-	K	כמו אך☀	crafted
+3N	PRON	זה אות☀	crafted
+THIS	PRON	הזה גם🔆	crafted
+THAT	PRON	ההוא גם☢	crafted
+sweet	ADJ	מתוק אש☢	crafted
+one	N	אחד אך☢	crafted
+person	N	אדם גוף☀ נפש	crafted
+pleasure	N	הנאה אושר🔆	crafted
+great	ADJ	גדול אדיר☀	crafted
+bite	V	נשך אוכל☀	crafted
+neck	N	צוואר גרון☀	crafted
+tear	V	קרע אש🔆	crafted
+out	N	החוצה גם☀ חוץ	crafted
+Adam's_apple	N	תפוח אדם☢	crafted
+cracker	N	קרקר גם☀	crafted
+chew	V	לעס אוכל🔆	crafted
+want	V	רוצה אני🔆	crafted
+lick	V	ליקק גם🔆	crafted
+eat	V	אכל גם☀ מזון	crafted
+obsession	N	אובססיה גיהנם🔆 טירוף	crafted
+swallow	V	בלע אוי☢	crafted
+whole	ADJ	שלם גם🔆	crafted
