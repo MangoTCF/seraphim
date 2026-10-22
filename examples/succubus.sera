@@ -2,194 +2,194 @@
 @dialect: succubus
 # My sweet one
 word nonpast    # 1: START / Ø / Ø / PRO:K
-  top: אלוקים בור אליך☢ מה
+  top: אלוקים בור אחריך☢ מה
   1:   Ø
   2:   Ø
-  end: אנכי ג☀ פדב
+  end: אלהים ג☀ פדב
 word nonpast    # 2: PRO:K / VOC- / CON- / PRO:ADJ
-  top: את אב☀ נלו
+  top: אש גויתי☀ נלו
   1:   נסי הי🔆 גדלה
-  2:   הויה אדוני☀ חכז
+  2:   הויה אלוהינו☀ חכז
   end: ביל כו🔆
 word nonpast    # 3: PRO:ADJ / sweet / one / PRO:K
   top: מב ייו🔆
   1:   מתוק אש☢
   2:   אחד אך☢
-  end: אלהי אאא☀ ונל
+  end: אדוני בא☀ ונל
 word nonpast    # 4: PRO:K / ABS- / 1S / -
-  top: אלהיך גויתי☀ לנו
+  top: א גדלו☀ לנו
   1:   איד☀ זו
-  2:   בו☀ צר
+  2:   ח☀ צר
   end: Ø
 
 ---
 # if you were a person then with great pleasure I would bite into your neck tear out your Adam ’s apple and like a cracker chew it
 word nonpast    # 1: START / IRR-bite / 1S.NOM / PRO:T
-  top: אלי בראשית אהיה☢ טול
+  top: אלך בשמן אשר☢ וטל
   1:   ~ לו אילו☢ - נשך אוכל☀
-  2:   ~ הג☀ לני לכּדּ
-  end: אמן הבא☀
+  2:   ~ חדריו☀ לני לכּדּ
+  end: אלה הבא☀
 word nonpast    # 2: PRO:T / t / t / PRO:V
-  top: אירא ח☀
+  top: אקרא הג☀
   1:   Ø
   2:   Ø
-  end: א☢ אלה
+  end: אלך☢ אדוני
 word nonpast    # 3: PRO:V / t / -INS / PRO:K
-  top: אלוהים☢ אישן
+  top: אלוהי☢ אנכי
   1:   Ø
   2:   גי☀ כּו
-  end: אדוני אאא☀ פו
+  end: אהיה בא☀ נול
 word nonpast    # 4: PRO:K / INS- / great / PRO:N
-  top: אלהי בא☀ לנו
+  top: אפקיד בא☀ לנו
   1:   לעת אקרא🔆 הסש
   2:   גדול אדיר☀
-  end: אפקיד☀ ויע
+  end: את☀ נלו
 word nonpast    # 5: PRO:N / pleasure / TRAL- / PRO:K
-  top: אדון☀ נלו
+  top: אך☀ פו
   1:   הנאה אושר🔆
   2:   מרח שמנו חוש☀
-  end: אדוני בא☀ נלו
+  end: אלהיך אאא☀ ויע
 word nonpast    # 6: PRO:K / CON- / neck / PRO:K
-  top: אהיה גדלו☀ נלו
-  1:   יהוה אלה☀ הג
+  top: אך בא☀ נול
+  1:   זיט אקרא☀ בו
   2:   צוואר גרון☀
-  end: אליך גדלו☀ נלו
+  end: אנכי אאא☀ פו
 word nonpast    # 7: PRO:K / ABS- / 2S / PRO:CONJ
-  top: אדוני אב☀ ונל
-  1:   חז☀ וז
+  top: אדני בא☀ ונל
+  1:   וט☀ אהבה
   2:   כגויי וגו☢
-  end: ו☀ אלה
+  end: ו☀ אפקיד
 word nonpast    # 8: PRO:CONJ / AND / tear.out / PRO:V
-  top: וישם☀ אלוהי
-  1:   וצור גם☀
-  2:   קרע אדני🔆 החוצה גויתי☀ חוץ
-  end: אלהים☢ אקרא
+  top: וארץ☀ אלי
+  1:   ובלכתך גם☀
+  2:   קרע א🔆 החוצה גדלו☀ חוץ
+  end: אליך☢ אלהי
 word nonpast    # 9: PRO:V / -OBJ / CON- / PRO:N
-  top: אלה☢ אלה
+  top: אמן☢ אקרא
   1:   אדב תזן☢
-  2:   יוי אלהיך☀ אז
-  end: אלי☀ לנו
+  2:   זיט אהיה☀ וב
+  end: אפקיד☀ פו
 word nonpast    # 10: PRO:N / Adam's_apple / ABS- / PRO:N
-  top: אלהים☀ לנו
+  top: אחריך☀ לנו
   1:   תפוח אדם☢
-  2:   חז☀ אחד
-  end: אלהים☀ לנו
+  2:   וט☀ וז
+  end: אדון☀ ונל
 word nonpast    # 11: PRO:N / 2S / SIM- / PRO:N
-  top: אלהים☀ ונל
-  1:   ויד חז☢
-  2:   כמו אלהים☀
-  end: אלוהי☀ לנו
+  top: אדון☀ פו
+  1:   כבודו טו☢
+  2:   כמו אלי☀
+  end: אלי☀ ויע
 word nonpast    # 12: PRO:N / cracker / AND / PRO:V
-  top: אקרא☀ פו
-  1:   קרקר בא☀
-  2:   אה אב☀
-  end: אישן☢ אלוהי
+  top: אשא☀ ונל
+  1:   קרקר גדלו☀
+  2:   וארץ אאא☀
+  end: אלהיך☢ אישן
 word nonpast    # 13: PRO:V / chew / -OBJ / PRO:N
-  top: אדני☢ אירא
-  1:   לעס אשר🔆
-  2:   או תכלית☢
-  end: את☀ נלו
+  top: אחתי☢ אהיה
+  1:   לעס אלהים🔆
+  2:   בה תכלית☢
+  end: אפקיד☀ נול
 word nonpast    # 14: PRO:N / 3N / IF / PRO:T
-  top: אלוהים☀ לנו
+  top: אדוני☀ פו
   1:   זה אות☀
   2:   אם אולי☀
-  end: אדוני ח☀
+  end: אנכי חדריו☀
 word nonpast    # 15: PRO:T / IRR / ABSV- / PRO:N
-  top: אלה הג☀
-  1:   לאות אמן☢
-  2:   פו הנשמה☢
-  end: אלוהינו☀ נלו
+  top: אלוהינו אז☀
+  1:   ייי אדני☢
+  2:   ונל תהלל☢
+  end: אישן☀ פו
 word nonpast    # 16: PRO:N / 2S / be / PRO:N
-  top: אלוהים☀ נול
-  1:   ידו וגו☢
-  2:   אאא גד גים☀
-  end: אהיה☀ נלו
+  top: אחסר☀ לנו
+  1:   כבוד וט☢
+  2:   אב גד גים☀
+  end: את☀ פו
 word nonpast    # 17: PRO:N / person / - / -
-  top: אדני☀ ונל
-  1:   אלוהים גוף☀ נפש
+  top: אשר☀ ויע
+  1:   אחסר גוף☀ נפש
   2:   Ø
   end: Ø
 
 ---
 # I want to lick bite and eat you
 word nonpast    # 1: START / NPFV-want / 1S.NOM / PRO:T
-  top: אלוהי בחפצו אלוהי☢ וטל
+  top: אש בעת אל☢ היל
   1:   ~ אדּב לכּדּ☀ - רוצה אני🔆
-  2:   ~ אז☀ כע לכּדּ
-  end: אלוהים הג☀
+  2:   ~ בו☀ כע לכּדּ
+  end: אמן גה☀
 word nonpast    # 2: PRO:T / t / t / PRO:V
-  top: אלוהינו וב☀
+  top: אלי אז☀
   1:   Ø
   2:   Ø
-  end: אלה☢ אישן
+  end: אמן☢ אש
 word nonpast    # 3: PRO:V / t / lick / PRO:CONJ
-  top: אפקיד☢ אלי
+  top: אל☢ אדני
   1:   Ø
-  2:   ליקק אב🔆
-  end: ובשכבך☀ אלהינו
+  2:   ליקק גויתי🔆
+  end: והיו☀ אלוהים
 word nonpast    # 4: PRO:CONJ / AND / bite / PRO:CONJ
-  top: ודברת☀ אדון
-  1:   וצור גדלו☀
-  2:   ילי אהיה☀
-  end: ואין☀ אלוהינו
+  top: ודברת☀ את
+  1:   ולא בא☀
+  2:   נגילה אלך☀
+  end: ומנוס☀ אלה
 word nonpast    # 5: PRO:CONJ / AND / eat / PRO:V
-  top: וצור☀ אלהי
-  1:   אה גויתי☀
-  2:   אכל ג☀ מזון
-  end: אנכי☢ את
+  top: ויחנך☀ אלה
+  1:   ואעירה ג☀
+  2:   אכל אב☀ מזון
+  end: אדון☢ את
 word nonpast    # 6: PRO:V / -OBJ / ABSV- / PRO:N
-  top: אלי☢ אמן
-  1:   דג תרועה☢
+  top: א☢ אלהינו
+  1:   זרועך שק☢
   2:   פו לעש☢
-  end: אלהינו☀ נלו
+  end: אלהיך☀ ונל
 word nonpast    # 7: PRO:N / 2S / - / -
-  top: אפקיד☀ ויע
-  1:   היה יה☢
+  top: אירא☀ לנו
+  1:   ודי וגו☢
   2:   Ø
   end: Ø
 
 ---
 # My sweet
 word nonpast    # 1: START / Ø / Ø / PRO:K
-  top: אלי בתפארה אדון☢ טול
+  top: אתה בנבל את☢ הלי
   1:   Ø
   2:   Ø
-  end: אלוהי גדלו☀ נול
+  end: אתה גויתי☀ נלו
 word nonpast    # 2: PRO:K / VOC- / CON- / PRO:ADJ
-  top: אלה אב☀ פו
-  1:   כל חז🔆 בלי
-  2:   כו אשר☀ הג
-  end: ולו ייו🔆
+  top: אירא גם☀ נלו
+  1:   נזכירה חז🔆 אלוה
+  2:   יהוה אלוהים☀ גה
+  end: יבל זטי🔆
 word nonpast    # 3: PRO:ADJ / sweet / one / PRO:K
-  top: לבדו זיט🔆
-  1:   דלו את☢
-  2:   הח אל☢
-  end: אלהים בא☀ נלו
+  top: מב זיט🔆
+  1:   מנחות אלהיך☢
+  2:   זו אתה☢
+  end: אך אב☀ ויע
 word nonpast    # 4: PRO:K / ABS- / 1S / -
-  top: אלי אב☀ פו
-  1:   הי☀ אחד
-  2:   הג☀ לס
+  top: אלי גויתי☀ ויע
+  1:   יה☀ וז
+  2:   ח☀ ומחול
   end: Ø
 
 ---
 # This is not love
 word nonpast    # 1: START / NPFV-be / THIS.NOM / PRO:T
-  top: אלהי בחפצו אשר☢ היל
-  1:   ~ אדּב לכּדּ☀ - אאא בה וזם☀
-  2:   ~ הזה בא🔆 לכּדּ
-  end: אלי הג☀
+  top: אלוהים בקדשו אלהי☢ וטל
+  1:   ~ אדּב לכּדּ☀ - בא דג החם☀
+  2:   ~ הזה גויתי🔆 לכּדּ
+  end: אליך גה☀
 word nonpast    # 2: PRO:T / t / NEG / PRO:V
-  top: אליך בו☀
+  top: אלהים חדריו☀
   1:   Ø
   2:   הדסא חכּז☀
-  end: אהיה☢ אלהי
+  end: אך☢ אדני
 word nonpast    # 3: PRO:V / t / t / PRO:N
-  top: א☢ אדוני
+  top: אקרא☢ אתה
   1:   Ø
   2:   Ø
-  end: אלוהי☀ ונל
+  end: אחתי☀ ונל
 word nonpast    # 4: PRO:N / love / - / -
-  top: אלוהינו☀ ויע
+  top: אפקיד☀ נול
   1:   אהבה אמת🔆
   2:   Ø
   end: Ø
@@ -197,17 +197,17 @@ word nonpast    # 4: PRO:N / love / - / -
 ---
 # It 's an obsession
 word nonpast    # 1: START / NPFV-be / 3N.NOM / PRO:T
-  top: אדון בין אלוהים☢ הלי
-  1:   ~ אדּב לכּדּ☀ - גויתי וא החם☀
-  2:   ~ יב אלי☀ לכּדּ
-  end: אפקיד אז☀
+  top: אלהים בין אלהיך☢ טול
+  1:   ~ אדּב לכּדּ☀ - אב דג וזם☀
+  2:   ~ וו אפקיד☀ לכּדּ
+  end: אלה וב☀
 word nonpast    # 2: PRO:T / t / t / PRO:V
-  top: אלוהים בו☀
+  top: אתה הג☀
   1:   Ø
   2:   Ø
-  end: אל☢ אדוני
+  end: אלוהינו☢ אך
 word nonpast    # 3: PRO:V / t / obsession / -
-  top: אלוהים☢ אנכי
+  top: אש☢ אלוהינו
   1:   Ø
   2:   אובססיה גיהנם🔆 טירוף
   end: Ø
@@ -215,55 +215,55 @@ word nonpast    # 3: PRO:V / t / obsession / -
 ---
 # And I want to swallow you whole
 word nonpast    # 1: START / NPFV-want / 1S.NOM / PRO:CONJ
-  top: אלוהי ברקיע אירא☢ וטל
-  1:   ~ אדּב לכּדּ☀ - לקע אלוהים🔆
-  2:   ~ וב☀ ומחול לכּדּ
-  end: ובקומך☀ אלוהינו
+  top: אנכי בחפצו אלהינו☢ היל
+  1:   ~ אדּב לכּדּ☀ - לעק אלהים🔆
+  2:   ~ בו☀ פי לכּדּ
+  end: וארץ☀ אשא
 word nonpast    # 2: PRO:CONJ / AND / t / PRO:V
-  top: ודר☀ אקרא
-  1:   ושננתם גדלו☀
+  top: ודר☀ אלהיך
+  1:   ונהרות ג☀
   2:   Ø
-  end: אישן☢ א
+  end: אך☢ אהיה
 word nonpast    # 3: PRO:V / t / t / PRO:V
-  top: את☢ אלהים
+  top: אך☢ אך
   1:   Ø
   2:   Ø
-  end: אהיה☢ אמן
+  end: אלך☢ אדני
 word nonpast    # 4: PRO:V / swallow / -OBJ / PRO:K
-  top: אדני☢ אדוני
+  top: אמן☢ אדני
   1:   בלע אוי☢
-  2:   וא לעש☢
-  end: אירא אב☀ נלו
+  2:   דג תכלית☢
+  end: אישן אאא☀ ונל
 word nonpast    # 5: PRO:K / ABSV- / 2S / PRO:ADJ
-  top: אלהינו אאא☀ ונל
-  1:   ויע ת☢
-  2:   ככלות וגו☢
-  end: ביל זיט🔆
+  top: אלך אב☀ נול
+  1:   ויע תורק☢
+  2:   יי וט☢
+  end: בלי יהוה🔆
 word nonpast    # 6: PRO:ADJ / whole / - / -
-  top: ולו יהוה🔆
-  1:   שלם בא🔆
+  top: מב יוי🔆
+  1:   שלם אאא🔆
   2:   Ø
   end: Ø
 
 ---
 # Be mine
 word nonpast    # 1: START / IMP-be / 2S.NOM / PRO:T
-  top: אדון ב אישן☢ הלי
-  1:   ~ נא אנא☢ - גויתי או דטם☀
-  2:   ~ ככלות וגו☢ לכּדּ
-  end: אלוהים גה☀
+  top: אדוני באחת אשר☢ וטל
+  1:   ~ נא אנא☢ - גם זרועך וזם☀
+  2:   ~ כוסי חז☢ לכּדּ
+  end: אירא אז☀
 word nonpast    # 2: PRO:T / t / t / PRO:V
-  top: אנכי ח☀
+  top: אהבוך חיי☀
   1:   Ø
   2:   Ø
-  end: אליך☢ אלוהינו
+  end: אלוהינו☢ אלהינו
 word nonpast    # 3: PRO:V / t / ABS- / PRO:N
-  top: אלוהי☢ אנכי
+  top: אלוהי☢ אהבוך
   1:   Ø
-  2:   וגו☀ הח
-  end: אלוהינו☀ פו
+  2:   הי☀ גי
+  end: אחריך☀ נלו
 word nonpast    # 4: PRO:N / 1S / - / -
-  top: אשר☀ נול
-  1:   ח☀ לס
+  top: אלהי☀ פו
+  1:   ח☀ ציון
   2:   Ø
   end: Ø

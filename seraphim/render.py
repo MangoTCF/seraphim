@@ -57,10 +57,10 @@ CHOIR_VOICES = [
 ]
 CHOIR_POS = [(0, 55, 2.2), (-18, -48, 2.2), (18, -48, 2.2)]
 
-TOKEN_GAP = 0.008
 BREAK_GAP = 0.08
-WORD_GAP = 0.06
+WORD_GAP = 0.025           # words run into each other, with soft edges
 SENTENCE_GAP = 0.5
+EDGE_FADE = 0.012          # fade at each line's edges, so words join without clicks
 MAX_STRETCH = 2.6          # for the elastic segments (vowels, sonorants, fricatives)
 ELASTIC = {"vowel", "nasal", "approx", "fric", "aspirate"}     # not trills: a long trill croaks
 LEAD_IN = 1.6      # room for 4D swells that arrive before the first word
@@ -91,10 +91,12 @@ class Options:
 STOPLIKE = {"stop", "glottal"}
 
 
-def line_segments(ml, tempo, rng=None, moan=0.0):
-    """Segments for one mouth line, humanized: each token its own loudness,
-    durations a little uneven, the last token softer. Moaning stretches the
-    vowels, slurs the stops and ends the line on a sigh."""
+def line_segments(ml, tempo, rng=None, moan=0.0, final=False):
+    """Segments for one mouth line, as connected speech: no pauses between
+    tokens (only at morpheme breaks), each token its own loudness, durations
+    a little uneven, the last token softer. The last word of a sentence
+    slows down. Moaning stretches the vowels, slurs the stops and ends the
+    line on a sigh."""
     rng = rng or np.random.default_rng(0)
     segs = []
     phon = [i for i, t in enumerate(ml.tokens) if t.kind == "phoneme"]
@@ -102,16 +104,18 @@ def line_segments(ml, tempo, rng=None, moan=0.0):
         if t.kind == "break":
             segs.append(Seg("sil", BREAK_GAP / tempo))
             continue
-        amp = rng.uniform(0.82, 1.08) * (0.85 if phon and i == phon[-1] else 1.0)
+        last = phon and i == phon[-1]
+        amp = rng.uniform(0.82, 1.08) * (0.85 if last else 1.0)
         for p in t.ipa:
             kind = PHONES[p]["kind"]
             d = PHONES[p]["dur"] / tempo * rng.lognormal(0, 0.07)
+            if kind == "vowel" and final and last:
+                d *= 1.3                    # final lengthening
             if moan and kind == "vowel":
                 d *= 1 + 1.1 * moan
             elif moan and kind in STOPLIKE:
                 d *= 1 - 0.3 * moan
             segs.append(Seg(p, d, tag=i, amp=amp))
-        segs.append(Seg("sil", TOKEN_GAP / tempo))
     if moan > 0.2:
         segs.append(Seg("h", (0.08 + 0.2 * moan) / tempo, amp=0.55))       # a sigh
     return segs
@@ -122,30 +126,61 @@ CONTOURS = {
     "hat": lambda k: 1.0 + 0.12 * np.sin(np.pi * min(k * 1.3, 1)) - 0.1 * k,
     "rise-fall": lambda k: 0.97 + 0.16 * np.sin(np.pi * k) - 0.06 * k,
 }
+HIGH_VOWELS = set("iuyɪʊ")
+LOW_VOWELS = set("aæɔ")
 
 
-def intonation(segs, voice, rng, moan=0.0):
-    """Speech contour: a random contour shape per line, a slow wander, and
-    an accent peak on one or two tokens."""
-    total = sum(s.dur for s in segs) or 1
-    shape = CONTOURS[rng.choice(list(CONTOURS))]
-    wobble = rng.uniform(-0.03, 0.03, 4)
-    tags = sorted({s.tag for s in segs if s.tag is not None})
-    accents = set(rng.choice(tags, size=min(len(tags), int(rng.integers(1, 3))), replace=False)) if tags else set()
-    t = 0.0
+def micro(segs):
+    """Micro-prosody, the involuntary bits that make speech sound alive:
+    high vowels a touch higher, low ones lower; after a voiceless consonant
+    the pitch starts a little high, after a voiced one a little low."""
+    prev = None
+    for s in segs:
+        p = PHONES.get(s.phone)
+        if p and p["kind"] == "vowel" and s.f0:
+            a, b = s.f0
+            k = 1.04 if s.phone in HIGH_VOWELS else 0.97 if s.phone in LOW_VOWELS else 1.0
+            onset = 1.0
+            if prev and prev["kind"] in ("stop", "fric", "aspirate"):
+                onset = 1.05 if not prev.get("voiced", False) else 0.96
+            s.f0 = (a * k * onset, b * k)
+        if p:
+            prev = p
+    return segs
+
+
+def contour(segs, voice, t0, s0, s1, shape, wobble, accents, prev_end=None, glide=0.06):
+    """Pitch for a word's segments on its sentence's contour: x runs from the
+    sentence's start (s0) to its end (s1), so the declination spans the whole
+    sentence. The word starts where this mouth's last word ended and glides
+    to the contour, so pitch flows across word boundaries."""
+    span = max(s1 - s0, 1e-3)
+    t = t0
     for s in segs:
         def at(x):
-            k = x / total
-            return voice.f0 * (shape(k) + wobble[int(min(k, 0.999) * 4)])
+            k = min(max((x - s0) / span, 0), 1)
+            return voice.f0 * (shape(k) + wobble[int(min(k, 0.999) * len(wobble))])
         bump = 1.09 if s.tag in accents else 1.0
         s.f0 = (at(t) * bump, at(t + s.dur) * bump)
         t += s.dur
-    return moanify(segs, moan, rng) if moan else segs
+    if prev_end:
+        # Portamento from the previous word over the first ~60 ms.
+        acc = 0.0
+        for s in segs:
+            if acc >= glide:
+                break
+            w0 = 1 - acc / glide
+            w1 = max(1 - (acc + s.dur) / glide, 0)
+            s.f0 = (s.f0[0] * (1 - w0) + prev_end * w0, s.f0[1] * (1 - w1) + prev_end * w1)
+            acc += s.dur
+    return segs
 
 
-def moanify(segs, moan, rng):
+def moanify(segs, moan, rng, grab=0.0):
     """Moaning: each long vowel becomes a swell, its pitch sliding up and
-    back down by a few semitones while its loudness rises and falls."""
+    back down by a few semitones while its loudness rises and falls. With
+    grab, the swell scoops up from below and grows toward its end instead of
+    fading: it pulls you in."""
     out = []
     for s in segs:
         if PHONES.get(s.phone, {}).get("kind") != "vowel" or s.dur < 0.08:
@@ -154,8 +189,10 @@ def moanify(segs, moan, rng):
         a, b = s.f0
         u = moan * rng.uniform(0.06, 0.2)
         mid = (a + b) / 2
-        pts = [a, mid * (1 + u), mid * (1 + 0.4 * u), b * (1 - 0.3 * u)]
-        for k, (frac, amp) in enumerate(((0.3, 0.8), (0.4, 1.0), (0.3, 0.75))):
+        scoop = 2 ** (-grab * rng.uniform(1.5, 3.5) / 12)          # start up to ~3 st below
+        pts = [a * scoop, mid * (1 + u), mid * (1 + 0.4 * u), b * (1 - 0.3 * u * (1 - grab))]
+        amps = [(0.8 - 0.25 * grab), 1.0, (0.75 + 0.4 * grab)]
+        for k, (frac, amp) in enumerate(zip((0.3, 0.4, 0.3), amps)):
             out.append(Seg(s.phone, s.dur * frac, (pts[k], pts[k + 1]), s.tag, s.amp * amp))
     return out
 
@@ -175,22 +212,31 @@ def fit(segs, target):
     return segs
 
 
-def hum(length, voice, rng, tempo, moan=0.0):
-    """A closed mouth vocalizing is a hum: [m] on the mouth's own pitch.
-    Moaning turns it into a swelling, sliding 'mmm'."""
-    segs = [Seg("m", length)]
-    intonation(segs, voice, rng)
-    if moan:
-        a, b = segs[0].f0
-        u = moan * rng.uniform(0.08, 0.2)
-        segs = [Seg("m", length * 0.35, (a, a * (1 + u)), amp=0.8),
-                Seg("m", length * 0.4, (a * (1 + u), a * (1 + 0.5 * u)), amp=1.0),
-                Seg("m", length * 0.25, (a * (1 + 0.5 * u), b * (1 - 0.2 * u)), amp=0.7)]
-    sig = render(segs, voice, rng).audio
-    r = min(int(0.06 * SR), len(sig) // 2)
+def hum_segments(length, moan, rng):
+    """A closed mouth vocalizing is a hum: [m]. Moaning turns it into a
+    swelling, sliding 'mmm' (pitch is filled in by the prosody pass)."""
+    if not moan:
+        return [Seg("m", length)]
+    return [Seg("m", length * 0.35, amp=0.8), Seg("m", length * 0.4, amp=1.0), Seg("m", length * 0.25, amp=0.7)]
+
+
+def hum_glide(segs, moan, rng):
+    """The hum's own swell on top of the contour."""
+    if not moan or len(segs) < 3:
+        return segs
+    u = moan * rng.uniform(0.08, 0.2)
+    for s, (ka, kb) in zip(segs, ((1, 1 + u), (1 + u, 1 + 0.5 * u), (1 + 0.5 * u, 1 - 0.2 * u))):
+        s.f0 = (s.f0[0] * ka, s.f0[1] * kb)
+    return segs
+
+
+def edges(sig, fade=EDGE_FADE):
+    """Soft edges so consecutive words join without clicks."""
+    r = min(int(fade * SR), len(sig) // 2)
     if r:
-        sig[:r] *= np.linspace(0, 1, r)
-        sig[-r:] *= np.linspace(1, 0, r)
+        ramp = 0.5 - 0.5 * np.cos(np.linspace(0, np.pi, r))
+        sig[:r] *= ramp
+        sig[-r:] *= ramp[::-1]
     return sig
 
 
@@ -218,6 +264,92 @@ def parse_voice(spec):
     return out
 
 
+HUNGRY = {"bite", "eat", "chew", "swallow", "lick", "tear", "devour", "taste", "consume", "hunger",
+          "drink", "gnaw", "suck", "flesh", "blood", "neck", "throat", "Adam's_apple", "obsession"}
+TENDER = {"love", "sweet", "heart", "soul", "kiss", "desire", "want", "pleasure", "beloved",
+          "darling", "embrace", "one"}
+SLURPY = {"lick", "eat", "swallow", "suck", "drink", "taste", "devour", "chew"}
+
+
+def hungry_tender(score, plans):
+    """Which mouth lines carry a hungry or tender morpheme, found by decoding
+    them through the lexicon (by phoneme value, so respelling doesn't matter).
+    Returns {(word, mouth): (kind, glosses)}."""
+    import re
+    from .lexicon import Lexicon
+    from .reading import decode_line
+    lx = Lexicon(save=False)
+    index = lx.by_signature()
+    out = {}
+    for wi, (w, *_rest) in enumerate(plans):
+        for m in MOUTHS:
+            d = decode_line(w.mouths[m], lx, index)
+            if d is None:
+                continue
+            parts = set(re.split(r"[-.]", d.gloss))
+            if parts & HUNGRY:
+                out[(wi, m)] = ("hungry", parts)
+            elif parts & TENDER:
+                out[(wi, m)] = ("tender", parts)
+    return out
+
+
+def grab_curves(plans, sentences, flags, dia, n):
+    """How far each mouth has pulled in toward the listener's ear, 0..~0.9,
+    over time: drifting in over each sentence, lurching closer on hungry and
+    tender words, easing back between sentences."""
+    rate = 100
+    m_ = int(n / SR * rate) + 2
+    t = np.arange(m_) / rate
+    base = np.zeros(m_)
+    for idxs in sentences:
+        s0 = plans[idxs[0]][1]
+        s1 = plans[idxs[-1]][1] + plans[idxs[-1]][3]
+        inside = (t >= s0) & (t <= s1)
+        base[inside] = np.maximum(base[inside], 0.15 + 0.75 * (t[inside] - s0) / max(s1 - s0, 1e-3))
+        after = t > s1
+        base[after] = np.maximum(base[after], 0.9 * np.exp(-(t[after] - s1) / 0.5))
+    out = {}
+    for m in MOUTHS:
+        bump = np.zeros(m_)
+        for (wi, mm), (kind, _) in flags.items():
+            if mm != m:
+                continue
+            g = plans[wi][1]
+            dt = np.clip(t - g, 0, None)
+            bump += np.where(t >= g, 0.6 * (1 - np.exp(-dt / 0.08)) * np.exp(-dt / 1.2), 0)
+        curve = np.clip(dia.grab * (base + bump), 0, 0.95)
+        out[m] = np.interp(np.arange(n) / SR, t, curve)
+    return out
+
+
+def foley_tracks(plans, sentences, flags, dia, opts, n):
+    """Mouth sounds at the ears: teeth snapping after hungry words and a wet
+    slurp after eating ones (hunger), a kiss before tender words and a
+    breath in before each sentence (grab)."""
+    events = []
+    for (wi, m), (kind, parts) in flags.items():
+        start, length = plans[wi][1], plans[wi][3]
+        if kind == "hungry" and dia.hunger:
+            events.append((start + length - 0.03, "snap", m, dia.hunger))
+            if parts & SLURPY:
+                events.append((start + length + 0.07, "slurp", m, 0.7 * dia.hunger))
+        if kind == "tender" and dia.grab:
+            events.append((start - 0.06, "kiss", m, 0.6 * dia.grab))
+    if dia.grab:
+        for si, idxs in enumerate(sentences):
+            events.append((plans[idxs[0]][1] - 0.45, "gasp", MOUTHS[si % len(MOUTHS)], 0.5 * dia.grab))
+    tracks = {m: np.zeros(n) for m in MOUTHS}
+    last = {}
+    for k, (when, kind, m, level) in enumerate(sorted(events)):
+        if when - last.get((kind, m), -9) < 0.3:
+            continue                    # no machine-gun of identical sounds
+        last[(kind, m)] = when
+        sound = fx.FOLEY[kind](_rng(opts.seed, 10, k))
+        place(tracks[m], sound * level * 0.22, max(when, 0))
+    return tracks
+
+
 def place(track, sig, start):
     a = int(round(start * SR))
     if a < 0:
@@ -237,10 +369,13 @@ def _rng(seed, *key):
 
 def _line_job(job):
     """Render one mouth's line for one word: voice, growl layer, whisper,
-    brightness, damage, 4D movement. Returns the pieces to place."""
-    (wi, mi, m, segs, voice, fem, wound, dia, opts, levels, moved, start) = job
+    brightness, damage, 4D movement. Segments arrive with their pitch
+    already planned (see the prosody pass). Returns the pieces to place."""
+    (wi, mi, m, segs, voice, fem, wound, dia, opts, levels, moved, start, surge) = job
     rng = _rng(opts.seed, 1, wi, mi)
-    segs = intonation(segs, voice, rng, dia.moan)
+    if surge:
+        # Hungry words: the growl and roar surge for this line.
+        voice = replace(voice, growl=min(1.0, voice.growl + surge), roar=min(1.0, voice.roar + 0.4 * surge))
     r = render(segs, voice, rng)
     out = {"m": m, "start": start, "main": None, "moved": None, "whisper": None}
     if voice.growl:
@@ -260,7 +395,7 @@ def _line_job(job):
         wv = replace(voice, voicing=0.0, breath=1.0, growl=0.0, roar=0.0, fry=0.0)
         whisp = render(segs, wv, rng).audio
         whisp *= dia.whisper * 0.8 * (np.sqrt(np.mean(r.audio ** 2)) / (np.sqrt(np.mean(whisp ** 2)) + 1e-9))
-        out["whisper"] = whisp
+        out["whisper"] = edges(whisp)
     octave = None
     if EXTRA in levels.values():
         up = [Seg(x.phone, x.dur, (x.f0[0] * 2, x.f0[1] * 2), x.tag) for x in segs]
@@ -268,6 +403,7 @@ def _line_job(job):
     sig = fx.brighten(r.audio, r.spans, levels, octave, rng, glitter=opts.glitter)
     if dia.damaged:
         sig = fx.wound(sig, rng, **wound)
+    sig = edges(sig)
     if moved:
         # The mouth stays shut; the morpheme materialises in front of it,
         # its echo arriving from the future before the sound does.
@@ -283,12 +419,12 @@ def _line_job(job):
 
 
 def _hum_job(job):
-    (wi, mi, m, length, voice, wound, dia, opts, tempo, start) = job
+    (wi, mi, m, segs, voice, wound, dia, opts, start) = job
     rng = _rng(opts.seed, 2, wi, mi)
-    sig = hum(length, voice, rng, tempo, dia.moan)
+    sig = render(segs, voice, rng).audio
     if dia.damaged:
         sig = fx.wound(sig, rng, **wound)
-    return {"m": m, "start": start, "main": sig * opts.hum, "moved": None, "whisper": None}
+    return {"m": m, "start": start, "main": edges(sig, 0.06) * opts.hum, "moved": None, "whisper": None}
 
 
 def _choir_chunk_job(job):
@@ -362,6 +498,8 @@ def synthesize(score, opts=None, progress=None):
     # ---- lay out words in time
     plans = []
     t = LEAD_IN
+    last_of_sentence = {i for i, w in enumerate(score.words)
+                        if i + 1 == len(score.words) or score.words[i + 1].sentence_start}
     for wi, w in enumerate(score.words):
         if w.sentence_start and plans:
             t += SENTENCE_GAP / tempo - WORD_GAP / tempo
@@ -369,27 +507,85 @@ def synthesize(score, opts=None, progress=None):
         for mi, m in enumerate(MOUTHS):
             ml = w.mouths[m]
             if not ml.silent:
-                lines[m] = line_segments(ml, tempo, _rng(opts.seed, 0, wi, mi), dia.moan)
+                lines[m] = line_segments(ml, tempo, _rng(opts.seed, 0, wi, mi), dia.moan, wi in last_of_sentence)
         own = {m: sum(s.dur for s in segs) for m, segs in lines.items()}
         length = max(own.values(), default=0.3)
         for m, segs in lines.items():
             fit(segs, length)
+        # A little rubato: no two words quite the same speed.
+        rub = _rng(opts.seed, 6, wi).lognormal(0, 0.05)
+        for segs in lines.values():
+            for x in segs:
+                x.dur *= rub
+        length *= rub
         plans.append((w, t, lines, length))
         t += length + WORD_GAP / tempo
     total = t + TAIL
     n = int(total * SR)
 
+    # ---- hungry and tender words, for grab and hunger
+    flags = hungry_tender(score, plans) if (dia.grab or dia.hunger) else {}
+
+    # ---- prosody: one contour per sentence and mouth, gliding across words
+    sentences, cur = [], []
+    for wi, (w, *_rest) in enumerate(plans):
+        if w.sentence_start and cur:
+            sentences.append(cur)
+            cur = []
+        cur.append(wi)
+    if cur:
+        sentences.append(cur)
+    hums = {}
+    for si, idxs in enumerate(sentences):
+        s0 = plans[idxs[0]][1]
+        s1 = plans[idxs[-1]][1] + plans[idxs[-1]][3]
+        for mi, m in enumerate(MOUTHS):
+            rng = _rng(opts.seed, 5, si, mi)
+            shape = CONTOURS[rng.choice(list(CONTOURS))]
+            wobble = rng.uniform(-0.03, 0.03, 6)
+            tags = [(wi, tg) for wi in idxs if m in plans[wi][2]
+                    for tg in sorted({x.tag for x in plans[wi][2][m] if x.tag is not None})]
+            pick = rng.choice(len(tags), size=min(len(tags), int(rng.integers(1, 4))), replace=False) if tags else []
+            accents = {tags[k] for k in pick}
+            prev_end = None
+            for wi in idxs:
+                w, start, lines, length = plans[wi]
+                mrng = _rng(opts.seed, 8, wi, mi)
+                if m in lines:
+                    segs = contour(lines[m], voices[m], start, s0, s1, shape, wobble,
+                                   {tg for (k, tg) in accents if k == wi}, prev_end)
+                    segs = micro(segs)
+                    if dia.moan:
+                        segs = moanify(segs, dia.moan, mrng, dia.grab)
+                    lines[m] = segs
+                elif opts.hum:
+                    segs = contour(hum_segments(length, dia.moan, mrng), voices[m], start, s0, s1,
+                                   shape, wobble, set(), prev_end)
+                    hums[(wi, m)] = hum_glide(segs, dia.moan, mrng)
+                else:
+                    continue
+                voiced = [x for x in (lines[m] if m in lines else hums[(wi, m)]) if x.f0 and x.phone != "sil"]
+                prev_end = voiced[-1].f0[1] if voiced else prev_end
+            for wi in idxs:
+                w = plans[wi][0]
+                if opts.hum and m in plans[wi][2] and w.mouths[m].moved:
+                    # A closed (moved) mouth hums too, on its contour.
+                    segs = contour(hum_segments(plans[wi][3], dia.moan, _rng(opts.seed, 8, wi, mi)), voices[m],
+                                   plans[wi][1], s0, s1, shape, wobble, set())
+                    hums[(wi, m)] = hum_glide(segs, dia.moan, _rng(opts.seed, 8, wi, mi))
+
     # ---- the mouths, as jobs
     line_jobs, hum_jobs = [], []
     for wi, (w, start, lines, length) in enumerate(plans):
         for mi, m in enumerate(MOUTHS):
-            if opts.hum and (m not in lines or w.mouths[m].moved):
-                hum_jobs.append((wi, mi, m, length, voices[m], wounds[m], dia, opts, tempo, start))
+            if (wi, m) in hums:
+                hum_jobs.append((wi, mi, m, hums[(wi, m)], voices[m], wounds[m], dia, opts, start))
             if m in lines:
                 ml = w.mouths[m]
                 levels = {i: tk.brightness for i, tk in enumerate(ml.tokens) if tk.kind == "phoneme" and tk.brightness}
+                surge = 0.45 * dia.hunger if flags.get((wi, m)) == "hungry" else 0.0
                 line_jobs.append((wi, mi, m, lines[m], voices[m], femme[m], wounds[m], dia, opts,
-                                  levels, ml.moved, start))
+                                  levels, ml.moved, start, surge))
     say(f"rendering {len(line_jobs)} mouth lines and {len(hum_jobs)} hums")
     results = _run(_line_job, line_jobs, opts.jobs, say, "lines") + _run(_hum_job, hum_jobs, opts.jobs)
     tracks = {m: np.zeros(n) for m in MOUTHS}
@@ -452,48 +648,69 @@ def synthesize(score, opts=None, progress=None):
             place(tr, sig, LEAD_IN - 0.9)
             choir_tracks.append(tr * env * opts.choir_level)
 
+    # ---- grab and hunger: trajectories toward the ears, and mouth sounds
+    curves = grab_curves(plans, sentences, flags, dia, n) if dia.grab else {}
+    foley = foley_tracks(plans, sentences, flags, dia, opts, n) if (dia.grab or dia.hunger) else {}
+
     # ---- mix in space
     say("spatializing")
     stems = {}
-    # (source, azimuth, elevation, distance, gain, reverb send)
+
+    def near(az, el):
+        """Right at the listener's ear on the source's side."""
+        return 78 * (-1 if az < 0 else 1), el * 0.2, 0.3
+
+    # (key, signal, azimuth, elevation, distance, gain, reverb send, grab curve)
     sources = []
     for m in MOUTHS:
         az, el, d = MOUTH_POS[m]
         stems[f"mouth-{m}"] = tracks[m] + moved[m]
-        sources.append((f"mouth-{m}", tracks[m], az, el, d, 1.0, opts.reverb_mix))
+        sources.append((f"mouth-{m}", tracks[m], az, el, d, 1.0, opts.reverb_mix, curves.get(m)))
         if moved[m].any():
             # In front of the closed mouth: nearer the listener, same side.
-            sources.append((f"moved-{m}", moved[m], az * 0.6, el * 0.6, d * 0.55, 0.7, opts.reverb_mix))
+            sources.append((f"moved-{m}", moved[m], az * 0.6, el * 0.6, d * 0.55, 0.7, opts.reverb_mix,
+                            curves.get(m)))
         if dia.whisper and whispers[m].any():
             # Right at the ears, on the mouth's side, dry: intimate, no hall.
             stems[f"whisper-{m}"] = whispers[m]
-            sources.append((f"whisper-{m}", whispers[m], 80 * (-1 if az < 0 else 1), el * 0.3, 0.25, 1.0, 0.0))
+            sources.append((f"whisper-{m}", whispers[m], *near(az, el)[:2], 0.25, 1.0, 0.0, None))
+        if m in foley and foley[m].any():
+            stems[f"foley-{m}"] = foley[m]
+            sources.append((f"foley-{m}", foley[m], *near(az, el), 1.0, 0.05, None))
     for vi, tr in enumerate(choir_tracks):
         az, el, d = CHOIR_POS[vi]
         stems[f"praise-{vi + 1}"] = tr
-        sources.append((f"praise-{vi + 1}", tr, az, el, d, 1.0, 1.4))
+        sources.append((f"praise-{vi + 1}", tr, az, el, d, 1.0, 1.4, None))
     mix = np.zeros((n, 2))
     send = np.zeros((n, 2))
-    sends = {key: snd for key, _, _, _, _, _, snd in sources}
-    if opts.space:
-        # Threads, not processes: scipy's filters release the GIL, and the
-        # stereo results stay in memory instead of being copied back.
-        from concurrent.futures import ThreadPoolExecutor
 
-        def spat(src):
-            key, sig, az, el, d, g, _ = src
-            return key, fx.spatialize(sig, az, el, d) * g
-        if opts.jobs == 1:
-            placed = [spat(src) for src in sources]
-        else:
-            with ThreadPoolExecutor(max_workers=len(sources)) as ex:
-                placed = list(ex.map(spat, sources))
+    def spat(src):
+        key, sig, az, el, d, g, snd, curve = src
+        if not opts.space:
+            dry = np.repeat(sig[:, None], 2, axis=1) * 0.7 * g
+            return dry, dry * snd
+        if curve is None:
+            dry = fx.spatialize(sig, az, el, d) * g
+            return dry, dry * snd
+        # Grab: crossfade (equal power) from the source's place to the ear.
+        # The close version gets the proximity bass of a mouth at your ear
+        # and stays out of the hall.
+        far = fx.spatialize(sig * np.cos(curve * np.pi / 2), az, el, d) * g
+        close = fx.spatialize(sig * np.sin(curve * np.pi / 2), *near(az, el)) * g
+        close = np.stack([fx.low_shelf(close[:, c], 250, 5) for c in range(2)], axis=1)
+        return far + close, far * snd
+
+    # Threads, not processes: scipy's filters release the GIL, and the
+    # stereo results stay in memory instead of being copied back.
+    if opts.jobs == 1:
+        placed = [spat(src) for src in sources]
     else:
-        placed = [(key, np.repeat(sig[:, None], 2, axis=1) * 0.7 * g) for key, sig, _, _, _, g, _ in sources]
-    for key, dry in placed:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=len(sources)) as ex:
+            placed = list(ex.map(spat, sources))
+    for dry, wet in placed:
         mix += dry
-        if sends[key]:
-            send += dry * sends[key]
+        send += wet
 
     # ---- the room
     def meta_float(k):

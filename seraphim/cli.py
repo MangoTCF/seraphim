@@ -80,6 +80,8 @@ KNOB_HELP = {
     "breath": "breathiness: more air, softer voice (any dialect)",
     "moan": "moaning: long sliding, swelling vowels and sighs (any dialect)",
     "whisper": "a whispered double of each mouth, right at your ears (any dialect)",
+    "grab": "voices pull in to your ears, lurching closer on hungry/tender words (any dialect)",
+    "hunger": "teeth snaps, slurps, kisses and growl surges on hungry/tender words (any dialect)",
 }
 
 

@@ -152,6 +152,80 @@ def brighten(audio, spans, levels, octave=None, rng=None, sr=SR, glitter=1.0):
     return y
 
 
+# ---------------------------------------------------------------- mouth sounds
+# Close-up foley for the grab and hunger knobs. Everything is short or
+# pitchless, so nothing here can whistle.
+
+def low_shelf(x, freq, gain_db, sr=SR):
+    A = 10 ** (gain_db / 40)
+    w = 2 * np.pi * freq / sr
+    alpha = np.sin(w) / 2 * np.sqrt(2)
+    cw = np.cos(w)
+    b = [A * ((A + 1) - (A - 1) * cw + 2 * np.sqrt(A) * alpha),
+         2 * A * ((A - 1) - (A + 1) * cw),
+         A * ((A + 1) - (A - 1) * cw - 2 * np.sqrt(A) * alpha)]
+    a = [(A + 1) + (A - 1) * cw + 2 * np.sqrt(A) * alpha,
+         -2 * ((A - 1) + (A + 1) * cw),
+         (A + 1) + (A - 1) * cw - 2 * np.sqrt(A) * alpha]
+    return lfilter(np.array(b) / a[0], np.array(a) / a[0], x)
+
+
+def _unit(x):
+    return x / (np.max(np.abs(x)) + 1e-12)
+
+
+def teeth_snap(rng, sr=SR):
+    """Incisors meeting: a hard bright click, a very short ring, the jaw's thud."""
+    L = int(0.07 * sr)
+    t = np.arange(L) / sr
+    click = sosfilt(design(2, 1800, "highpass", sr), rng.standard_normal(L) * np.exp(-t / 0.0012))
+    ring = np.sin(2 * np.pi * rng.uniform(2300, 3300) * t) * np.exp(-t / 0.008)
+    thud = np.sin(2 * np.pi * rng.uniform(90, 130) * t) * np.exp(-t / 0.018)
+    return _unit(click + 0.25 * ring + 0.7 * thud)
+
+
+def slurp(rng, sr=SR):
+    """Wet sucking: noise through a resonance that sweeps up, with tiny wet clicks."""
+    dur = rng.uniform(0.18, 0.32)
+    L = int(dur * sr)
+    noise = rng.standard_normal(L)
+    out = np.zeros(L)
+    blocks = 16
+    hop = L // blocks
+    win = np.hanning(2 * hop)
+    lo, hi = rng.uniform(500, 800), rng.uniform(2000, 2900)
+    for k in range(blocks - 1):
+        fc = round((lo + (hi - lo) * (k / blocks) ** 0.7) / 50) * 50
+        seg = noise[k * hop: k * hop + 2 * hop]
+        out[k * hop: k * hop + len(seg)] += sosfilt(design(2, [fc * 0.75, fc * 1.3], "bandpass", sr), seg) * win[: len(seg)]
+    env = np.sin(np.pi * np.linspace(0, 1, L)) ** 0.7
+    for p in rng.integers(0, L - 200, rng.integers(3, 7)):
+        out[p:p + 60] += rng.standard_normal(60) * np.exp(-np.arange(60) / 12) * 2
+    return _unit(out * env)
+
+
+def kiss(rng, sr=SR):
+    """A lip smack: the suction pop, then a little puff."""
+    L = int(0.09 * sr)
+    t = np.arange(L) / sr
+    pop = sosfilt(design(2, [500, 2200], "bandpass", sr), rng.standard_normal(L) * np.exp(-t / 0.0025))
+    puff = sosfilt(design(2, [800, 4000], "bandpass", sr), rng.standard_normal(L)) * np.exp(-t / 0.03) * 0.25
+    return _unit(pop + puff)
+
+
+def gasp(rng, sr=SR):
+    """A hungry breath in: a rising hiss through an open mouth, caught short."""
+    dur = rng.uniform(0.3, 0.5)
+    L = int(dur * sr)
+    x = sosfilt(design(2, [700, 3800], "bandpass", sr), rng.standard_normal(L))
+    env = np.linspace(0, 1, L) ** 1.6
+    env[-int(0.02 * sr):] *= np.linspace(1, 0, int(0.02 * sr))
+    return _unit(x * env)
+
+
+FOLEY = {"snap": teeth_snap, "slurp": slurp, "kiss": kiss, "gasp": gasp}
+
+
 # ---------------------------------------------------------------- damage
 
 def wound(audio, rng, roar=0.0, whistle=0.0, wound_hz=4000.0, sr=SR):

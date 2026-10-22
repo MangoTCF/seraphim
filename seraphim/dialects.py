@@ -24,6 +24,12 @@ Style knobs, for every dialect:
              breath    breathiness: more air, softer folds, darker highs
              moan      sustained, sliding, swelling vowels and soft sighs
              whisper   a whispered double of every mouth, close to the ears
+             grab      the voices pull in: from their places to right at your
+                       ears over each sentence, lurching closer on hungry and
+                       tender words; moans scoop up and swell; a breath in
+                       before each sentence
+             hunger    the cannibal half: teeth snapping after hungry words,
+                       wet slurps, kisses on tender words, growl surges
 
 Every knob can be overridden on the command line (--growl 0.9) or in a score
 (@growl: 0.9).
@@ -34,7 +40,7 @@ from dataclasses import dataclass, fields, replace
 
 MOUTHS = ("top", "1", "2", "end")
 DAMAGE = ("growl", "fry", "roar", "whistle", "throat")
-STYLE = ("breath", "moan", "whisper")
+STYLE = ("breath", "moan", "whisper", "grab", "hunger")
 
 
 @dataclass(frozen=True)
@@ -51,6 +57,8 @@ class Dialect:
     breath: float = 0.0
     moan: float = 0.0
     whisper: float = 0.0
+    grab: float = 0.0
+    hunger: float = 0.0
     gender: float = None        # default voice (-1..1) when -v isn't given
     choir: str = "praise"       # praise | backmask
     mode: str = "dorian"        # dorian | locrian | phrygian
@@ -74,11 +82,11 @@ class Dialect:
 DIALECTS = {
     "seraphic": Dialect("seraphic"),
     "demonic": Dialect("demonic", heresy=True, growl=0.8, fry=0.4, roar=0.55, whistle=0.45,
-                       throat=0.6, pitch=-4, disfigure=0.7, choir="backmask", mode="locrian",
+                       throat=0.6, pitch=-4, disfigure=0.7, hunger=0.3, choir="backmask", mode="locrian",
                        choir_pitch=-12),
     "succubus": Dialect("succubus", heresy=True, growl=0.25, fry=0.25, roar=0.1, whistle=0.0,
                         throat=0.1, pitch=0, disfigure=0.3, breath=0.65, moan=0.6, whisper=0.45,
-                        gender=0.85, choir="backmask", mode="phrygian", choir_pitch=0),
+                        grab=0.7, hunger=0.5, gender=0.85, choir="backmask", mode="phrygian", choir_pitch=0),
 }
 ALIASES = {"fallen": "demonic", "infernal": "demonic", "satanic": "demonic", "hellish": "demonic",
            "hell": "demonic", "angelic": "seraphic", "heavenly": "seraphic",

@@ -1,22 +1,22 @@
-@title: Please do n't cry child of hell child of hell my heart and soul belong to heaven I will not be a sinner   How did you even manage to love me
+@title: Please don't cry, child of hell, my heart and soul belong to heaven... I will not be a sinner. How did you even manage to love me?!
 # Please do n't cry child of hell
 word nonpast    # 1: START / IMP-cry / 2S.NOM / PRO:T
-  top: אלוקים בור אליך☢ מה
+  top: אלוקים בור אישן☢ מה
   1:   ~ נא אנא☢ - בכה אוי🔆
   2:   ~ כגויי הי☢ לכּדּ
   end: אליך הבא☀
 word nonpast    # 2: PRO:T / t / NEG / PRO:ADV
-  top: את וב☀
+  top: אש וב☀
   1:   Ø
   2:   הדסא חכּז☀
   end: נסי היל☢
 word nonpast    # 3: PRO:ADV / please / t / PRO:V
-  top: מי ולט☢
-  1:   בבקשה אליך☀
+  top: כל וטל☢
+  1:   בבקשה אישן☀
   2:   Ø
-  end: אירא☢ אנכי
+  end: אחסר☢ אקרא
 word nonpast    # 4: PRO:V / t / - / -
-  top: אישן☢ אפקיד
+  top: אירא☢ אפקיד
   1:   Ø
   2:   Ø
   end: Ø
@@ -24,22 +24,22 @@ word nonpast    # 4: PRO:V / t / - / -
 ---
 # child of hell
 word nonpast    # 1: START / Ø / Ø / PRO:K
-  top: אדון ברקיע אשר☢ וטל
+  top: אשר אא אמן☢ וטל
   1:   Ø
   2:   Ø
-  end: אשר ג☀ פדב
+  end: אמן ג☀ פדב
 word nonpast    # 2: PRO:K / VOC- / CON- / PRO:N
-  top: אמן אאא☀ לנו
-  1:   מי וגו🔆 גדלה
-  2:   הויה אשר☀ חכז
-  end: אירא☀ פו
+  top: אלך בא☀ לנו
+  1:   ילי וגו🔆 גדלה
+  2:   הויה א☀ חכז
+  end: אמן☀ לנו
 word nonpast    # 3: PRO:N / child / ABS- / PRO:N
-  top: אמן☀ ויע
+  top: אלך☀ ויע
   1:   ילד גדל☀
   2:   איד☀ זו
-  end: אישן☀ נול
+  end: את☀ ויע
 word nonpast    # 4: PRO:N / hell / - / -
-  top: אקרא☀ פו
+  top: אחתי☀ נול
   1:   אש גיהנם☢
   2:   Ø
   end: Ø
@@ -47,103 +47,103 @@ word nonpast    # 4: PRO:N / hell / - / -
 ---
 # my heart and soul belong to heaven
 word nonpast    # 1: START / NPFV-belong / Ø / PRO:T
-  top: אישן בחפצו אישן☢ טול
+  top: אחריך בתף אירא☢ ולט
   1:   ~ אדּב לכּדּ☀ - שייך אני☀
   2:   Ø
-  end: א בו☀
+  end: אחתי בו☀
 word nonpast    # 2: PRO:T / t / NOM- / PRO:K
-  top: אקרא אז☀
+  top: אחריך הג☀
   1:   Ø
   2:   ולט☀ נד
-  end: אקרא אב☀ פו
+  end: אהבוך גויתי☀ פו
 word nonpast    # 3: PRO:K / CON- / heart / PRO:K
-  top: אקרא גדלו☀ פו
-  1:   זיט אליך☀ הג
+  top: אחריך גם☀ פו
+  1:   זיט אישן☀ חיי
   2:   לב אמת☀
-  end: א גדלו☀ נלו
+  end: א אב☀ לנו
 word nonpast    # 4: PRO:K / ABS- / 1S / PRO:CONJ
-  top: אנכי אב☀ ונל
-  1:   וגו☀ וז
-  2:   הג☀ צר
-  end: ו☀ אמן
+  top: אתה אאא☀ לנו
+  1:   חז☀ יבא
+  2:   בו☀ צר
+  end: ו☀ אפקיד
 word nonpast    # 5: PRO:CONJ / AND / CON- / PRO:N
-  top: וישם☀ אפקיד
-  1:   וצור גם☀
-  2:   יוי אשר☀ גה
-  end: אנכי☀ פו
+  top: ויחנך☀ אתה
+  1:   וישם גם☀
+  2:   זטי אנכי☀ חדריו
+  end: את☀ לנו
 word nonpast    # 6: PRO:N / soul / ABS- / PRO:N
-  top: אמן☀ לנו
+  top: אהבוך☀ נול
   1:   נפש אור🔆
-  2:   חז☀ יג
-  end: אמן☀ לנו
+  2:   באחד☀ וז
+  end: אחריך☀ לנו
 word nonpast    # 7: PRO:N / 1S / t / PRO:K
-  top: אקרא☀ לנו
-  1:   הג☀ ציון
+  top: אלך☀ נלו
+  1:   אז☀ כע
   2:   Ø
-  end: אקרא אב☀ נלו
+  end: אשר בא☀ נלו
 word nonpast    # 8: PRO:K / ALL- / heaven / -
-  top: אדון אאא☀ נלו
+  top: אפקיד גויתי☀ נול
   1:   גו זח☀ דטם
-  2:   שמים אפקיד🔆 רקיע
+  2:   שמים את🔆 רקיע
   end: Ø
 
 ---
 # I will not be a sinner
 word nonpast    # 1: START / PFV-be / 1S.NOM / PRO:T
-  top: אירא במנים אמן☢ טול
-  1:   ~ רם לנו🔆 - בא גד גים☀
-  2:   ~ וב☀ לס לכּדּ
-  end: אירא בו☀
+  top: א בשבתך אחתי☢ טול
+  1:   ~ רם לנו🔆 - גדלו גד גים☀
+  2:   ~ וב☀ ציון לכּדּ
+  end: אשר ח☀
 word nonpast    # 2: PRO:T / t / NEG / PRO:V
-  top: אדון בו☀
+  top: אש וב☀
   1:   Ø
-  2:   עזו חכּז☀
-  end: אפקיד☢ א
+  2:   יס חכּז☀
+  end: את☢ את
 word nonpast    # 3: PRO:V / t / t / PRO:N
-  top: אירא☢ אנכי
+  top: אמן☢ אמן
   1:   Ø
   2:   Ø
-  end: אמן☀ פו
+  end: אש☀ פו
 word nonpast    # 4: PRO:N / sinner / - / -
-  top: א☀ ונל
-  1:   חוטא אשר☢
+  top: אחריך☀ ויע
+  1:   חוטא אישן☢
   2:   Ø
   end: Ø
 
 ---
 # How did you even manage to love me
 word nearpast    # 1: START / PERF-manage / 2S.NOM / PRO:COMP
-  top: את בכל אקרא☢ ולט
-  1:   ~ ז החם☀ - הצליח ג☀
-  2:   ~ דיו טו☢ לכּדּ
+  top: אהבוך בתקע אהבוך☢ הלי
+  1:   ~ ז זום☀ - הצליח אאא☀
+  2:   ~ דיו חז☢ לכּדּ
   end: אדון☢ מהב
 word nearpast    # 2: PRO:COMP / Q / t / PRO:ADV
-  top: א☢ יל
-  1:   האם אליך☀
+  top: אנכי☢ מעיניך
+  1:   האם אירא☀
   2:   Ø
-  end: כל וטל☢
+  end: המה הלי☢
 word nearpast    # 3: PRO:ADV / even / t / PRO:V
-  top: גואלי ולט☢
-  1:   אפילו אאא☀
+  top: ומד מה☢
+  1:   אפילו אב☀
   2:   Ø
-  end: א☢ אישן
+  end: אפקיד☢ אחתי
 word nearpast    # 4: PRO:V / t / -INS / PRO:K
-  top: אמן☢ אישן
+  top: אשר☢ אתה
   1:   Ø
   2:   גי☀ כּו
-  end: אפקיד גדלו☀ נול
+  end: אך אאא☀ לנו
 word nearpast    # 5: PRO:K / INS- / WH / PRO:V
-  top: אפקיד אב☀ ונל
+  top: אלך אאא☀ ונל
   1:   לעת אקרא🔆 הסש
-  2:   הלי☀ איך
-  end: את☢ אירא
+  2:   וטל☀ איך
+  end: אשא☢ אחתי
 word nearpast    # 6: PRO:V / love / -OBJ / PRO:K
-  top: אמן☢ אדון
-  1:   אהבה אישן🔆
+  top: אליך☢ אש
+  1:   אהבה אלך🔆
   2:   אדב תזן☢
-  end: אשר אב☀ נול
+  end: אמן אאא☀ ונל
 word nearpast    # 7: PRO:K / ABSV- / 1S / -
-  top: את גדלו☀ ונל
-  1:   ויע תרועה☢
-  2:   ח☀ לני
+  top: אש בא☀ ויע
+  1:   נלו שק☢
+  2:   חדריו☀ צדק
   end: Ø

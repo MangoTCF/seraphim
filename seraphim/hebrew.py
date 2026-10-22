@@ -6,6 +6,7 @@ phonemic. Values use Mispar Hechrachi with the final letters extended to
 If a string's sum is not a phoneme, only its first (rightmost) letter counts.
 """
 
+import hashlib
 import itertools
 import unicodedata
 
@@ -132,6 +133,10 @@ def _matres(cl, begadkefat):
     the first slot of the string (segolate-style) and ə after that.
     אלוקים -> ʔaluqim, הבא -> hava, וו -> wu."""
     phones = []
+    # A per-string choice, so a spelling always sounds the same but different
+    # strings don't all fall into the same few vowels.
+    pick = int(hashlib.md5("".join(ch for ch, _ in cl).encode()).hexdigest()[:8], 16)
+    slot = 0
     for i, (ch, marks) in enumerate(cl):
         last = i == len(cl) - 1
         after_consonant = bool(phones) and phones[-1] not in VOWEL_PHONES
@@ -139,22 +144,25 @@ def _matres(cl, begadkefat):
             continue                    # final ה after a vowel is silent
         if after_consonant and DAGESH not in marks:
             if ch == "ו":
-                phones.append("o" if last else "u")
+                phones.append("o" if last or (pick >> i) & 1 else "u")
                 continue
             if ch == "י":
-                phones.append("i")
+                phones.append("e" if (pick >> (i + 7)) % 4 == 0 else "i")
                 continue
             if ch == "א" or (ch == "ה" and last):
                 phones.append("a")
                 continue
         c = _consonant(ch, marks, begadkefat)
         if after_consonant:
+            r = (pick >> (2 * slot + 3)) % 8
+            slot += 1
             if phones[-1] in GUTTURALS or c in GUTTURALS:
-                phones.append("a")
-            elif not any(p in VOWEL_PHONES for p in phones):
-                phones.append("e")
+                # mostly hataf-patah, sometimes hataf-segol or hataf-qamats
+                phones.append(("a", "a", "a", "a", "ɛ", "ɛ", "e", "o")[r])
+            elif slot == 1:
+                phones.append(("e", "e", "e", "a", "i", "o", "e", "ɛ")[r])
             else:
-                phones.append("ə")
+                phones.append(("ə", "ə", "ə", "e", "a", "i", "ə", "o")[r])
         phones.append(c)
     if len(phones) == 1:
         phones.append("a" if phones[0] in GUTTURALS else "e")
