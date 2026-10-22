@@ -223,7 +223,34 @@ def gasp(rng, sr=SR):
     return _unit(x * env)
 
 
-FOLEY = {"snap": teeth_snap, "slurp": slurp, "kiss": kiss, "gasp": gasp}
+def crack(rng, sr=SR):
+    """Something breaking inside a wing: a sharp crack, then splintering."""
+    L = int(rng.uniform(0.18, 0.3) * sr)
+    t = np.arange(L) / sr
+    snap = sosfilt(design(2, [300, 5000], "bandpass", sr), rng.standard_normal(L) * np.exp(-t / 0.004))
+    body = np.sin(2 * np.pi * rng.uniform(140, 220) * t) * np.exp(-t / 0.015)
+    splinters = np.zeros(L)
+    for p in rng.integers(int(0.01 * sr), L - 300, rng.integers(5, 12)):
+        g = rng.standard_normal(250) * np.exp(-np.arange(250) / 40)
+        splinters[p:p + 250] += g * rng.uniform(0.2, 0.7) * np.exp(-p / sr / 0.08)
+    splinters = sosfilt(design(2, 1500, "highpass", sr), splinters)
+    return _unit(snap + 0.5 * body + 0.6 * splinters)
+
+
+def rustle(rng, sr=SR):
+    """Feathers: a dry, uneven flurry of tiny noise grains."""
+    L = int(rng.uniform(0.35, 0.6) * sr)
+    out = np.zeros(L)
+    noise = sosfilt(design(2, [1500, 7000], "bandpass", sr), rng.standard_normal(L))
+    env = np.zeros(L)
+    for p in rng.integers(0, L - 400, rng.integers(25, 50)):
+        n = int(rng.uniform(80, 400))
+        env[p:p + n] += np.hanning(n) * rng.uniform(0.2, 1)
+    out = noise * env * np.sin(np.pi * np.linspace(0, 1, L))
+    return _unit(out)
+
+
+FOLEY = {"snap": teeth_snap, "slurp": slurp, "kiss": kiss, "gasp": gasp, "crack": crack, "rustle": rustle}
 
 
 # ---------------------------------------------------------------- damage

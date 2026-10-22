@@ -136,6 +136,22 @@ Three style knobs work in every dialect (the succubus turns them up by default):
 ./seraphim.sh synth examples/heaven.sera -d fallen --play      # an angel's text, fallen
 ```
 
+## Tonal markers
+
+How a word is said, without changing what it means: pain, fear and anger change a seraph's voice the way they change a real one. In a score they go on word lines, `word nonpast tone=pain:0.9,scream:0.5`, plus `stammer` to break off and restart the first syllable. `@tone:` sets them for a whole score and `--tone pain:0.8` for a render. `translate` infers them from the English: pain words and cries ("Oh!") for pain, "!" for screams and commands, fear words and "…" for trembling, a trailing "…" for a whimper, "I… I" for a stammer.
+
+| Tone | What it does |
+|---|---|
+| `pain` | Pitch forced up (up to ~6 st), each vowel wailing downward, sudden upward voice cracks, a pressed and rough voice with heavy jitter, catching breath, sobbing breaths before words, louder |
+| `scream` | Up to an octave higher in rising–falling arcs, the jaw wide open (first formant up), harsh and loud, vowels held |
+| `anger` | Louder, faster consonants, pressed voice, a little higher ("Begone!") |
+| `fear` | An irregular tremor in pitch and loudness, breathier, higher, hurried |
+| `whimper` | Softer, breathy and thin, pitch sinking |
+
+While a mouth is in pain or screaming, the praise choir falters with it: the chant sags, cracks and drops out (mirrored correctly for backmasked choirs). Breaking words ("break", "snap", "crack", "tear") get a crack inside the wing, and wing words a rustle of feathers, both at the ears.
+
+Measured on `examples/pain.sera` against the same score without markers: "Oh!" goes from 185 to 399 Hz with 4.7× the high-frequency harshness, "Stop hurting me!" from 160 to 286 Hz and is the loudest line, and the whimpered last line is the softest.
+
 ## Reverb
 
 `--room NAME` picks the space and `--reverb N` sets how wet it is (1 = the room's normal amount, 0 = dry, 2 = drenched). `--reverb-time S` (RT60), `--reverb-tone` (0 bright .. 1 dark) and `--predelay MS` reshape any room. All of them also work in a score: `@room: clip`, `@reverb: 0.8`, `@reverb_time: 2.5`.
@@ -182,6 +198,7 @@ Brightness marks go after a token: `☀`/`*` bright, `🔆`/`☀☀`/`**` extra 
 
 * `examples/sentence1.sera` is sentence 1 of the video's demo, transcribed back into Hebrew from the on-screen IPA. `read` decodes it to the video's own gloss, `NPFV NEG 1S comprehend -OBJ ABS- Aghma_Shwa CON- allure`. `check` shows where the demo breaks its own phonology.
 * `examples/kadosh.sera` hides *qadosh* and *amen* in pointed-Hebrew phonemes.
+* `examples/pain.sera`/`pain.txt` ("Begone, evil spirits! Stop hurting me! Oh! I… I feel like my wings are breaking…") is the tonal-marker test: commands, a scream, a stammer, a whimper, and wings breaking.
 * `examples/heaven.sera` ("Please don't cry, child of hell…") and `examples/demonic.sera`/`demonic.txt` ("My sweet one, if you were a person…", in the demonic dialect) exercise the grammar extensions: imperative `IMP`, irrealis `IRR`, conditional `IF`, questions `Q`/`WH`, `AND`, the vocative, the similative `SIM-`, inanimate `3N` and demonstratives.
 * `examples/english.txt` is the video's source text. Try `./seraphim.sh translate < examples/english.txt --audio out/x.wav`.
 

@@ -38,6 +38,7 @@ class Voice:
     roar: float = 0.0       # turbulent false-fold noise in the source
     throat: float = 0.0     # pharyngeal constriction
     voicing: float = 1.0    # 0 = a pure whisper
+    open: float = 0.0       # jaw opening (screaming): F1 up, F2 a little up
 
 
 @dataclass
@@ -245,6 +246,9 @@ def render(segs, voice, rng=None, sr=SR, default_f0=None):
         return np.interp(tf, xs, ys)
 
     F = np.stack([track("f", 0.035, k) for k in range(5)]) * voice.fscale
+    if voice.open:
+        F[0] *= 1 + 0.3 * voice.open
+        F[1] *= 1 + 0.06 * voice.open
     if voice.throat:
         # A constricted pharynx raises F1 and pulls F2 down; damage widens
         # the resonances.

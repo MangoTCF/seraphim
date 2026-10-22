@@ -86,6 +86,7 @@ class Options:
     voice: dict = None        # gender per mouth / 'choir', -1 masculine .. +1 feminine
     dialect: str = None       # overrides the score's @dialect
     knobs: dict = None        # dialect knob overrides, e.g. {'growl': 0.9}
+    tones: dict = None        # tonal markers applied to every word, e.g. {'pain': 0.8}
 
 
 STOPLIKE = {"stop", "glottal"}
@@ -209,6 +210,172 @@ def fit(segs, target):
     factor = min(max((target - fixed) / flex, 1.0), MAX_STRETCH)
     for s in elastic:
         s.dur *= factor
+    return segs
+
+
+# ---------------------------------------------------------------- tones
+# Tonal markers (tone=pain:0.9,... on a word) say how a word is said. They
+# don't change what it means; they change the voice, the way pain, fear and
+# anger change a real one.
+
+def word_tones(w, score, opts):
+    from .score import parse_tones
+    t = parse_tones(score.meta["tone"]) if "tone" in score.meta else {}
+    t.update(w.tones)
+    t.update(opts.tones or {})
+    return t
+
+
+def tone_timing(segs, tones):
+    """Pain and screams stretch the vowels into cries; anger and fear hurry
+    the consonants; screams and pain are louder, whimpers softer."""
+    if not tones:
+        return segs
+    pain, scream, anger, fear, whimper = (tones.get(k, 0) for k in ("pain", "scream", "anger", "fear", "whimper"))
+    vk = 1 + 0.6 * pain + 1.0 * scream - 0.15 * anger
+    ck = 1 - 0.2 * anger - 0.1 * fear
+    ak = 1 + 0.4 * pain + 0.8 * scream + 0.4 * anger - 0.4 * whimper
+    for x in segs:
+        kind = PHONES.get(x.phone, {}).get("kind")
+        if kind == "vowel":
+            x.dur *= vk
+        elif kind:
+            x.dur *= ck
+        x.amp *= ak
+    return segs
+
+
+def stammer(segs, rng, fear=0.5):
+    """'I... I...': the first syllable, started and broken off, once or twice."""
+    head = []
+    for x in segs:
+        head.append(x)
+        if PHONES.get(x.phone, {}).get("kind") == "vowel":
+            break
+    out = []
+    for _ in range(2 if fear > 0.5 else 1):
+        out += [Seg(x.phone, x.dur * 0.8, None, x.tag, x.amp * 0.85) for x in head]
+        out.append(Seg("sil", rng.uniform(0.18, 0.32)))
+    return out + segs
+
+
+def tone_pitch(segs, tones, rng):
+    """Pitch under strain. Pain pushes the voice up and makes each vowel wail
+    downward, with sudden upward cracks where the voice breaks; a scream
+    goes higher still and arcs; fear raises it a little; a whimper sinks."""
+    if not tones:
+        return segs
+    pain, scream, anger, fear, whimper = (tones.get(k, 0) for k in ("pain", "scream", "anger", "fear", "whimper"))
+    lift = 2 ** ((6 * pain + 12 * scream + 2 * anger + 3 * fear - 2 * whimper) / 12)
+    out = []
+    for x in segs:
+        if not x.f0:
+            out.append(x)
+            continue
+        a, b = x.f0[0] * lift, x.f0[1] * lift
+        if PHONES.get(x.phone, {}).get("kind") == "vowel":
+            b *= 2 ** (-(3 * pain + 2 * whimper) / 12)              # the wail falls away
+            if scream:
+                mid = (a + b) / 2 * 2 ** (scream * rng.uniform(1, 3) / 12)
+                out += [Seg(x.phone, x.dur * 0.45, (a, mid), x.tag, x.amp),
+                        Seg(x.phone, x.dur * 0.55, (mid, b), x.tag, x.amp)]
+                continue
+            if x.dur > 0.12 and rng.random() < 0.4 * (pain + scream):
+                # The voice cracks: a sudden jump up, held briefly, then back.
+                k = rng.uniform(0.25, 0.55)
+                c = min(rng.uniform(0.06, 0.11), x.dur * 0.4)
+                pre = x.dur * k
+                up = 2 ** (rng.uniform(5, 9) / 12)
+                mid = a + (b - a) * k
+                out += [Seg(x.phone, pre, (a, mid), x.tag, x.amp),
+                        Seg(x.phone, c, (mid * up, mid * up), x.tag, x.amp * 1.1),
+                        Seg(x.phone, x.dur - pre - c, (mid, b), x.tag, x.amp)]
+                continue
+        out.append(Seg(x.phone, x.dur, (a, b), x.tag, x.amp))
+    return out
+
+
+def tone_gain(tones):
+    """Loudness as a gain after rendering (each render is normalized, so
+    per-segment amplitudes only shape a word from inside)."""
+    if not tones:
+        return 1.0
+    g = lambda k: tones.get(k, 0)
+    return max(1 + 0.5 * g("pain") + 1.4 * g("scream") + 0.5 * g("anger") - 0.45 * g("whimper"), 0.3)
+
+
+def tone_voice(v, tones):
+    """Voice quality: pain presses and roughens the folds and catches the
+    breath; a scream opens the jaw and turns harsh; fear trembles;
+    anger presses; a whimper goes breathy and thin."""
+    if not tones:
+        return v
+    pain, scream, anger, fear, whimper = (tones.get(k, 0) for k in ("pain", "scream", "anger", "fear", "whimper"))
+    return replace(v,
+                   oq=max(v.oq - 0.12 * pain - 0.15 * scream - 0.1 * anger + 0.1 * whimper, 0.35),
+                   jitter=v.jitter * (1 + 4 * pain + 3 * scream + 2 * fear),
+                   roar=min(1.0, v.roar + 0.35 * pain + 0.6 * scream + 0.15 * anger),
+                   breath=v.breath + 0.15 * pain + 0.3 * whimper + 0.15 * fear,
+                   voicing=v.voicing * (1 - 0.3 * whimper),
+                   open=max(v.open, scream, 0.3 * pain),
+                   vibrato=max(v.vibrato, 0.035 * fear), vib_rate=7.5 if fear else v.vib_rate)
+
+
+BREAKS = {"break", "crack", "snap", "shatter", "tear", "rip", "split"}
+WINGS = {"wing", "feather", "pinion"}
+
+
+def pain_sounds(score, plans, tones, opts, n):
+    """At the ears: a crack inside the wing on breaking words, a rustle of
+    feathers on wing words, a sobbing breath in before painful words."""
+    import re
+    from .lexicon import Lexicon
+    from .reading import decode_line
+    lx = Lexicon(save=False)
+    index = lx.by_signature()
+    events = []
+    rng = _rng(opts.seed, 11)
+    for wi, (w, start, lines, length) in enumerate(plans):
+        hurt = max(tones[wi].get("pain", 0), tones[wi].get("scream", 0))
+        for m in MOUTHS:
+            d = decode_line(w.mouths[m], lx, index)
+            if d is None:
+                continue
+            parts = set(re.split(r"[-.]", d.gloss))
+            if parts & BREAKS:
+                events.append((start + length * 0.6, "crack", m, 0.6 + 0.4 * hurt))
+            if parts & WINGS:
+                events.append((start + length * 0.3, "rustle", m, 0.5))
+        if hurt >= 0.5 and rng.random() < 0.6:
+            events.append((start - 0.35, "gasp", MOUTHS[wi % len(MOUTHS)], 0.4 * hurt))
+    tracks = {m: np.zeros(n) for m in MOUTHS}
+    last = {}
+    for k, (when, kind, m, level) in enumerate(sorted(events)):
+        if when - last.get(kind, -9) < 0.4:
+            continue
+        last[kind] = when
+        place(tracks[m], fx.FOLEY[kind](_rng(opts.seed, 12, k)) * level * 0.22, max(when, 0))
+    return tracks
+
+
+def falter(segs, spans, t0, length, backmask, rng):
+    """The praise breaks while a mouth is in pain: the chant sags, cracks and
+    drops out. spans are (start, end, intensity) on the final timeline; a
+    backmasked choir is reversed afterwards, so its times are mirrored."""
+    if not spans:
+        return segs
+    t = 0.0
+    for x in segs:
+        mid = t + x.dur / 2
+        when = t0 + (length - mid if backmask else mid)
+        t += x.dur
+        p = max((k for a, b, k in spans if a <= when <= b), default=0)
+        if not p or not x.f0:
+            continue
+        sag = 2 ** (-(1.5 + 1.5 * rng.random()) * p / 12)
+        crack = 2 ** (4 / 12) if rng.random() < 0.25 * p else 1.0
+        x.f0 = (x.f0[0] * sag * crack, x.f0[1] * sag)
+        x.amp *= 0.0 if rng.random() < 0.12 * p else rng.uniform(1 - 0.6 * p, 1)
     return segs
 
 
@@ -371,7 +538,7 @@ def _line_job(job):
     """Render one mouth's line for one word: voice, growl layer, whisper,
     brightness, damage, 4D movement. Segments arrive with their pitch
     already planned (see the prosody pass). Returns the pieces to place."""
-    (wi, mi, m, segs, voice, fem, wound, dia, opts, levels, moved, start, surge) = job
+    (wi, mi, m, segs, voice, fem, wound, dia, opts, levels, moved, start, surge, gain) = job
     rng = _rng(opts.seed, 1, wi, mi)
     if surge:
         # Hungry words: the growl and roar surge for this line.
@@ -403,7 +570,9 @@ def _line_job(job):
     sig = fx.brighten(r.audio, r.spans, levels, octave, rng, glitter=opts.glitter)
     if dia.damaged:
         sig = fx.wound(sig, rng, **wound)
-    sig = edges(sig)
+    sig = edges(sig) * gain
+    if out["whisper"] is not None:
+        out["whisper"] = out["whisper"] * gain
     if moved:
         # The mouth stays shut; the morpheme materialises in front of it,
         # its echo arriving from the future before the sound does.
@@ -419,12 +588,12 @@ def _line_job(job):
 
 
 def _hum_job(job):
-    (wi, mi, m, segs, voice, wound, dia, opts, start) = job
+    (wi, mi, m, segs, voice, wound, dia, opts, start, gain) = job
     rng = _rng(opts.seed, 2, wi, mi)
     sig = render(segs, voice, rng).audio
     if dia.damaged:
         sig = fx.wound(sig, rng, **wound)
-    return {"m": m, "start": start, "main": edges(sig, 0.06) * opts.hum, "moved": None, "whisper": None}
+    return {"m": m, "start": start, "main": edges(sig, 0.06) * opts.hum * gain, "moved": None, "whisper": None}
 
 
 def _choir_chunk_job(job):
@@ -498,6 +667,7 @@ def synthesize(score, opts=None, progress=None):
     # ---- lay out words in time
     plans = []
     t = LEAD_IN
+    wtones = [word_tones(w, score, opts) for w in score.words]
     last_of_sentence = {i for i, w in enumerate(score.words)
                         if i + 1 == len(score.words) or score.words[i + 1].sentence_start}
     for wi, w in enumerate(score.words):
@@ -507,7 +677,11 @@ def synthesize(score, opts=None, progress=None):
         for mi, m in enumerate(MOUTHS):
             ml = w.mouths[m]
             if not ml.silent:
-                lines[m] = line_segments(ml, tempo, _rng(opts.seed, 0, wi, mi), dia.moan, wi in last_of_sentence)
+                segs = line_segments(ml, tempo, _rng(opts.seed, 0, wi, mi), dia.moan, wi in last_of_sentence)
+                segs = tone_timing(segs, wtones[wi])
+                if w.stammer:
+                    segs = stammer(segs, _rng(opts.seed, 13, wi, mi), wtones[wi].get("fear", 0.5))
+                lines[m] = segs
         own = {m: sum(s.dur for s in segs) for m, segs in lines.items()}
         length = max(own.values(), default=0.3)
         for m, segs in lines.items():
@@ -555,13 +729,14 @@ def synthesize(score, opts=None, progress=None):
                     segs = contour(lines[m], voices[m], start, s0, s1, shape, wobble,
                                    {tg for (k, tg) in accents if k == wi}, prev_end)
                     segs = micro(segs)
+                    segs = tone_pitch(segs, wtones[wi], mrng)
                     if dia.moan:
                         segs = moanify(segs, dia.moan, mrng, dia.grab)
                     lines[m] = segs
                 elif opts.hum:
                     segs = contour(hum_segments(length, dia.moan, mrng), voices[m], start, s0, s1,
                                    shape, wobble, set(), prev_end)
-                    hums[(wi, m)] = hum_glide(segs, dia.moan, mrng)
+                    hums[(wi, m)] = tone_pitch(hum_glide(segs, dia.moan, mrng), wtones[wi], mrng)
                 else:
                     continue
                 voiced = [x for x in (lines[m] if m in lines else hums[(wi, m)]) if x.f0 and x.phone != "sil"]
@@ -579,13 +754,14 @@ def synthesize(score, opts=None, progress=None):
     for wi, (w, start, lines, length) in enumerate(plans):
         for mi, m in enumerate(MOUTHS):
             if (wi, m) in hums:
-                hum_jobs.append((wi, mi, m, hums[(wi, m)], voices[m], wounds[m], dia, opts, start))
+                hum_jobs.append((wi, mi, m, hums[(wi, m)], tone_voice(voices[m], wtones[wi]), wounds[m], dia, opts, start,
+                                 tone_gain(wtones[wi])))
             if m in lines:
                 ml = w.mouths[m]
                 levels = {i: tk.brightness for i, tk in enumerate(ml.tokens) if tk.kind == "phoneme" and tk.brightness}
                 surge = 0.45 * dia.hunger if flags.get((wi, m)) == "hungry" else 0.0
-                line_jobs.append((wi, mi, m, lines[m], voices[m], femme[m], wounds[m], dia, opts,
-                                  levels, ml.moved, start, surge))
+                line_jobs.append((wi, mi, m, lines[m], tone_voice(voices[m], wtones[wi]), femme[m], wounds[m], dia, opts,
+                                  levels, ml.moved, start, surge, tone_gain(wtones[wi])))
     say(f"rendering {len(line_jobs)} mouth lines and {len(hum_jobs)} hums")
     results = _run(_line_job, line_jobs, opts.jobs, say, "lines") + _run(_hum_job, hum_jobs, opts.jobs)
     tracks = {m: np.zeros(n) for m in MOUTHS}
@@ -615,6 +791,9 @@ def synthesize(score, opts=None, progress=None):
             return langs[-1]
 
         jobs, lengths, chdmg = [], {}, {}
+        pain_spans = [(plans[wi][1], plans[wi][1] + plans[wi][3] + 0.4,
+                       max(wtones[wi].get("pain", 0), wtones[wi].get("scream", 0)))
+                      for wi in range(len(plans)) if wtones[wi].get("pain") or wtones[wi].get("scream")]
         for vi in range(len(CHOIR_VOICES)):
             voice, factor = choir_voice(vi, gender.get("choir", gender["all"]))
             factor *= 2 ** (dia.choir_pitch / 12)
@@ -627,6 +806,8 @@ def synthesize(score, opts=None, progress=None):
                 if s.f0:
                     s.f0 = (s.f0[0] * factor, s.f0[1] * factor)
             lengths[vi] = sum(s.dur for s in segs)
+            segs = falter(segs, pain_spans, LEAD_IN - 0.9, lengths[vi], dia.choir == "backmask",
+                          _rng(opts.seed, 14, vi))
             for ci, (offset, chunk) in enumerate(phrase_chunks(segs)):
                 jobs.append((vi, ci, offset, chunk, voice, factor, opts))
         say(f"praise voices ({len(jobs)} phrases)")
@@ -651,6 +832,9 @@ def synthesize(score, opts=None, progress=None):
     # ---- grab and hunger: trajectories toward the ears, and mouth sounds
     curves = grab_curves(plans, sentences, flags, dia, n) if dia.grab else {}
     foley = foley_tracks(plans, sentences, flags, dia, opts, n) if (dia.grab or dia.hunger) else {}
+    if any(wtones):
+        for m, tr in pain_sounds(score, plans, wtones, opts, n).items():
+            foley[m] = foley[m] + tr if m in foley else tr
 
     # ---- mix in space
     say("spatializing")

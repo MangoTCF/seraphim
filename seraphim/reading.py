@@ -46,6 +46,9 @@ IRREGULAR = {
 }
 
 
+STATIVE = {"be", "have", "want", "love", "like", "know", "feel", "belong", "understand", "comprehend",
+           "see", "hear", "need", "mean", "own", "seem", "hate", "believe", "remember", "think", "prefer",
+           "desire", "contain", "consist", "deserve", "matter", "sing", "obsess"}
 DOUBLING = {"begin", "run", "sit", "swim", "stop", "get", "put", "let", "win", "forget", "plan",
             "cut", "hit", "shut", "set", "dig", "admit", "commit", "permit", "regret", "occur"}
 
@@ -399,6 +402,10 @@ class Realizer:
             if never:
                 return "never " + past + prt
             return ("did not " + base if neg else past) + prt
+        if aspect == "NPFV" and base not in STATIVE and not neg and tense == "latin":
+            # An ongoing event, not a state: 'my wings are breaking'
+            be = "am" if subj == "I" else "is" if third else "are"
+            return f"{be} {self.gerund(v)}"
         if never:
             return "never " + (base + "s" if third else base) + prt
         if neg:

@@ -85,9 +85,17 @@ KNOB_HELP = {
 }
 
 
+def _tones(spec):
+    from .score import parse_tones
+    try:
+        return parse_tones(spec)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
+
+
 def _room_kw(args):
-    """Reverb and parallelism options shared by every rendering command."""
-    return dict(room=getattr(args, "room", None), reverb=getattr(args, "reverb", None),
+    """Reverb, tone and parallelism options shared by every rendering command."""
+    return dict(tones=getattr(args, "tone", None),room=getattr(args, "room", None), reverb=getattr(args, "reverb", None),
                 reverb_time=getattr(args, "reverb_time", None), reverb_tone=getattr(args, "reverb_tone", None),
                 predelay=None if getattr(args, "predelay", None) is None else args.predelay / 1000,
                 jobs=getattr(args, "jobs", 0) or 0)
@@ -305,6 +313,8 @@ def main(argv=None):
         r.add_argument("--reverb-tone", type=float, metavar="N", help="tail colour: 0 bright .. 1 dark")
         r.add_argument("--predelay", type=float, metavar="MS", help="gap before the tail starts, in milliseconds")
         sp.add_argument("-j", "--jobs", type=int, default=0, help="parallel workers (0 = one per core, 1 = no parallelism)")
+        sp.add_argument("--tone", type=_tones, metavar="SPEC",
+                        help="tonal markers for every word, e.g. pain:0.8,scream:0.5 (pain scream anger fear whimper)")
 
     sp = sub.add_parser("synth", help="render a .sera score to WAV")
     sp.add_argument("score")
