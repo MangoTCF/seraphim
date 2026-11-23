@@ -1,6 +1,8 @@
 """seraphim: a voice synthesizer for Babelingua's Seraphim."""
 
 import argparse
+import math
+import json
 import os
 import shutil
 import subprocess
@@ -11,13 +13,16 @@ import numpy as np
 from scipy.io import wavfile
 
 from . import hebrew
+from .grammar import GrammarError
 from .score import MOUTHS, ScoreError, parse, report
 from .synth import SR
 
 
-def _write(path, audio):
+def _write(path, audio, format="pcm16"):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    pcm = (np.clip(audio, -1, 1) * 32767).astype(np.int16)
+    if not np.isfinite(audio).all():
+        raise ScoreError("audio contains nonfinite samples")
+    pcm = audio.astype(np.float32) if format == "float32" else (np.clip(audio, -1, 1) * 32767).astype(np.int16)
     wavfile.write(path, SR, pcm)
 
 
@@ -42,7 +47,7 @@ def _out(args, audio, default):
     """Write and/or play: --play alone writes nothing, otherwise -o (or default)."""
     path = args.output or (None if args.play else default)
     if path:
-        _write(path, audio)
+        _write(path, audio, getattr(args, "format", "pcm16"))
         print(f"wrote {path} ({len(audio) / SR:.1f} s)", file=sys.stderr)
     if args.play:
         _play(audio)
@@ -54,6 +59,67 @@ def _voice(spec):
         return parse_voice(spec)
     except ValueError as e:
         raise argparse.ArgumentTypeError(str(e))
+
+
+def _number(s, *, positive=False, unit=False):
+    try:
+        v = float(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {s!r}") from None
+    if not math.isfinite(v):
+        raise argparse.ArgumentTypeError("must be finite")
+    if positive and v <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    if not positive and v < 0:
+        raise argparse.ArgumentTypeError("must not be negative")
+    if unit and not 0 <= v <= 1:
+        raise argparse.ArgumentTypeError("must be between 0 and 1")
+    return v
+
+
+def _finite_float(s):
+    try:
+        v = float(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {s!r}") from None
+    if not math.isfinite(v):
+        raise argparse.ArgumentTypeError("must be finite")
+    return v
+
+
+def _positive_float(s):
+    return _number(s, positive=True)
+
+
+def _nonnegative_float(s):
+    return _number(s)
+
+
+def _unit_float(s):
+    return _number(s, unit=True)
+
+
+def _nonnegative_int(s):
+    try:
+        v = int(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not an integer: {s!r}") from None
+    if v < 0:
+        raise argparse.ArgumentTypeError("must not be negative")
+    return v
+
+
+def _knob_type(name):
+    if name == "pitch":
+        return _finite_float
+    if name == "gender":
+        def gender(s):
+            v = _finite_float(s)
+            if not -1 <= v <= 1:
+                raise argparse.ArgumentTypeError("must be between -1 and 1")
+            return v
+        return gender
+    return _unit_float
 
 
 VOICE_HELP = ("-1 masculine .. 0 androgynous .. +1 feminine, or per mouth: "
@@ -96,10 +162,14 @@ def _tones(spec):
 
 def _room_kw(args):
     """Reverb, tone and parallelism options shared by every rendering command."""
-    return dict(tones=getattr(args, "tone", None),room=getattr(args, "room", None), reverb=getattr(args, "reverb", None),
+    return dict(sample_banks=getattr(args, "sample_bank", None), sample_approximation=not getattr(args, "strict_bank_phones", False),
+                syllable_blend=getattr(args, "syllable_blend", .5), mouth_blend=getattr(args, "mouth_blend", None),
+                prayer_time=not getattr(args, "no_prayer_time", False), transitions=getattr(args, "transitions", 1.0),
+                prayer_tail=getattr(args, "prayer_tail", 2.4), prayer_rise=getattr(args, "prayer_rise", 7.0),
+                tones=getattr(args, "tone", None),room=getattr(args, "room", None), reverb=getattr(args, "reverb", None),
                 reverb_time=getattr(args, "reverb_time", None), reverb_tone=getattr(args, "reverb_tone", None),
                 predelay=None if getattr(args, "predelay", None) is None else args.predelay / 1000,
-                jobs=getattr(args, "jobs", 0) or 0)
+                jobs=getattr(args, "jobs", 0) or 0, master=not getattr(args, "no_master", False))
 
 
 def _knobs(args):
@@ -113,29 +183,54 @@ def _load(args):
 
 
 def cmd_check(args):
-    print(report(_load(args)))
+    from .score import diagnostics
+    score = _load(args)
+    issues = diagnostics(score)
+    print(json.dumps(issues, ensure_ascii=False, indent=2) if args.json else report(score))
+    if args.strict and issues:
+        raise SystemExit(1)
+
+
+def cmd_inspect(args):
+    from .render import Options, plan
+    score = _load(args)
+    resolved = plan(score, Options(seed=args.seed, dialect=args.dialect, voice=args.voice,
+                                   knobs=_knobs(args), **_room_kw(args)))
+    summary = resolved.summary()
+    summary["score"] = dict(title=score.meta.get("title", ""),
+                           portable=bool(score.lexicon), lexicon_hash=score.meta.get("lexicon_hash"))
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 
 def cmd_synth(args):
-    from .render import Options, synthesize
+    from .render import Options, plan, synthesize
     score = _load(args)
-    if args.tempo:
+    if args.tempo is not None:
         score.meta["tempo"] = str(args.tempo)
     if not args.quiet:
         print(report(score), file=sys.stderr)
     opts = Options(choir=not args.no_choir, space=not args.no_space,
                    reverse_4d=args.reverse_4d, seed=args.seed, glitter=args.glitter, hum=args.hum,
+                   keep_stems=bool(args.stems or args.preview),
                    voice=args.voice, dialect=args.dialect, knobs=_knobs(args), **_room_kw(args))
     if args.choir_level is not None:
         opts.choir_level = args.choir_level
     say = (lambda s: print(f"  … {s}", file=sys.stderr)) if not args.quiet else None
-    out, stems = synthesize(score, opts, say)
+    resolved = plan(score, opts)
+    out, stems = synthesize(score, progress=say, render_plan=resolved)
     if args.stems:
         for name, sig in stems.items():
             peak = np.max(np.abs(sig))
-            if peak > 0:
-                _write(os.path.join(args.stems, f"{name}.wav"), sig / peak * 0.9)
+            if args.normalize_stems and peak > 0:
+                sig = sig / peak * 0.9
+            _write(os.path.join(args.stems, f"{name}.wav"), sig, args.format)
         print(f"wrote stems to {args.stems}/", file=sys.stderr)
+    if args.preview:
+        from .preview import html_preview
+        os.makedirs(os.path.dirname(os.path.abspath(args.preview)), exist_ok=True)
+        with open(args.preview, "w", encoding="utf-8") as f:
+            f.write(html_preview(score, resolved, out, stems))
+        print(f"wrote {args.preview}", file=sys.stderr)
     _out(args, out, "seraphim.wav")
 
 
@@ -151,7 +246,7 @@ def cmd_say(args):
     if not args.quiet:
         print(report(score), file=sys.stderr)
     out, _ = synthesize(score, Options(choir=not args.no_choir, seed=args.seed, voice=args.voice,
-                                       dialect=args.dialect, knobs=_knobs(args), **_room_kw(args)))
+                                       dialect=args.dialect, knobs=_knobs(args), keep_stems=False, **_room_kw(args)))
     _out(args, out, "seraphim-word.wav")
 
 
@@ -217,9 +312,9 @@ def _emit(sentences, lx, args):
     if args.audio or args.play:
         from .render import Options, synthesize
         out, _ = synthesize(score, Options(seed=args.seed, voice=args.voice, dialect=args.dialect,
-                                           knobs=_knobs(args), **_room_kw(args)))
+                                           knobs=_knobs(args), keep_stems=False, **_room_kw(args)))
         if args.audio:
-            _write(args.audio, out)
+            _write(args.audio, out, args.format)
             print(f"wrote {args.audio} ({len(out) / SR:.1f} s)", file=sys.stderr)
         if args.play:
             _play(out)
@@ -229,7 +324,7 @@ def cmd_translate(args):
     from .english import translate
     lx = _lexicon(args)
     text = " ".join(args.text) if args.text else sys.stdin.read()
-    _emit(translate(text, lx), lx, args)
+    _emit(translate(text, lx, strict=args.strict), lx, args)
 
 
 def cmd_gloss(args):
@@ -245,8 +340,9 @@ def cmd_gloss(args):
 
 def cmd_read(args):
     from .reading import english, fronted, read_score
-    lx = _lexicon(args)
     score = _load(args)
+    from .lexicon import score_lexicon
+    lx = score_lexicon(score)
     for i, r in enumerate(read_score(score, lx), 1):
         print(f"sentence {i}")
         for w in r["chain"]:
@@ -255,9 +351,12 @@ def cmd_read(args):
         for p in r["problems"]:
             print(f"  ! {p}")
         print("  gloss:   " + " ".join(r["terms"]))
+        print("  tense:   " + "; ".join(f"word {w['spoken']}: {'+'.join(w['tenses']) or 'unspecified'}" for w in r["temporal"]))
         if fronted(r):
             print("  active:  " + ", ".join(fronted(r)) + " (spoken before the start word)")
         print("  english: " + english(r, lx))
+        if args.strict and r["problems"]:
+            raise SystemExit(1)
 
 
 def cmd_write(args):
@@ -272,7 +371,7 @@ def cmd_write(args):
 
 
 def cmd_lexicon(args):
-    from .lexicon import USER, Lexicon, check_tokens, guess_pos
+    from .lexicon import POS_VALUES, USER, Lexicon, LexiconError, check_tokens, guess_pos
     lx = Lexicon(save=False)
     if args.action == "list":
         for e in sorted(lx.entries.values(), key=lambda e: (e.source, e.gloss)):
@@ -280,10 +379,16 @@ def cmd_lexicon(args):
                 continue
             print(f"{e.gloss:<16} {e.pos:<5} {e.source:<8} {' '.join(e.tokens)}")
     elif args.action == "add":
+        if not args.gloss:
+            raise LexiconError("lexicon add needs a gloss and at least one token: seraphim lexicon add GLOSS TOKENS...")
+        if not args.tokens:
+            raise LexiconError(f"lexicon add {args.gloss}: at least one token is required")
+        pos = args.pos or guess_pos(args.gloss)
+        if pos not in POS_VALUES:
+            raise LexiconError(
+                f"unknown part of speech {pos!r}; known: {', '.join(sorted(POS_VALUES))}")
         check_tokens(args.tokens)
-        os.makedirs(os.path.dirname(USER), exist_ok=True)
-        with open(USER, "a", encoding="utf-8") as f:
-            f.write(f"{args.gloss}\t{args.pos or guess_pos(args.gloss)}\t{' '.join(args.tokens)}\tuser\n")
+        lx.add(args.gloss, pos, args.tokens, replace=args.replace)
         print(f"added {args.gloss} to {USER}")
     elif args.action == "path":
         print(USER)
@@ -293,27 +398,61 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="seraphim", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    web = sub.add_parser("web", help="open the local browser voice workbench")
+    web.add_argument("--port", type=int, default=8765)
+    web.add_argument("--output", help="directory for render files")
+    def launch_web(args):
+        from .web import main as web_main
+        options = ["--port", str(args.port)]
+        if args.output:
+            options += ["--output", args.output]
+        web_main(options)
+    web.set_defaults(func=launch_web)
+
     from . import dialects
 
     def common(sp):
         sp.add_argument("--seed", type=int, default=0)
         sp.add_argument("--heresy", action="store_true", help="allow names of God as phonemes")
         sp.add_argument("-d", "--dialect", type=_dialect, metavar="NAME",
-                        help="seraphic (default), demonic, succubus or nephilim; aliases: " + ", ".join(sorted(dialects.ALIASES)))
+                        help="dialects: " + ", ".join(sorted(dialects.DIALECTS)) +
+                        "; default: seraphic; aliases: " + ", ".join(sorted(dialects.ALIASES)))
 
     def knob_opts(sp):
+        def sample_assignment(value):
+            from .samplebank import parse_selection
+            try:
+                return parse_selection(value)
+            except ValueError as exc:
+                raise argparse.ArgumentTypeError(str(exc)) from None
+        sp.add_argument("--sample-bank", type=sample_assignment, metavar="ASSIGNMENTS", help="BANK or top=BANK,1=BANK,choir=BANK,praise-1=BANK; formant keeps the built-in voice")
+        sp.add_argument("--strict-bank-phones", action="store_true", help="use formant fallback rather than approximating missing bank phonemes")
+        def blend_assignment(value):
+            from .legato import parse_overrides
+            try:
+                return parse_overrides(value)
+            except ValueError as exc:
+                raise argparse.ArgumentTypeError(str(exc)) from None
+        sp.add_argument("--syllable-blend", type=_unit_float, default=.5, metavar="N", help="0 previous articulation .. 1 connected syllable blending")
+        sp.add_argument("--mouth-blend", type=blend_assignment, metavar="ASSIGNMENTS", help="per-mouth syllable blend, e.g. top=0.8,1=0.4,praise-1=0; omitted mouths inherit")
+        sp.add_argument("--transitions", type=_unit_float, default=1.0, metavar="N", help="0 linear ramps .. 1 smooth sound transitions")
+        sp.add_argument("--no-prayer-time", action="store_true", help="use legacy chant without melodic tense signatures")
+        sp.add_argument("--prayer-tail", type=float, default=2.4, metavar="SECONDS", help="final prayer fade, 0 to disable")
+        sp.add_argument("--prayer-rise", type=float, default=7.0, metavar="SEMITONES", help="pitch rise during the prayer fade")
         g = sp.add_argument_group("voice and dialect tuning (0 = off; defaults come from the dialect)")
         for k, h in KNOB_HELP.items():
-            g.add_argument(f"--{k}", type=float, metavar="N", help=h)
+            g.add_argument(f"--{k}", type=_knob_type(k), metavar="N", help=h)
         from .fx import ROOMS
         r = sp.add_argument_group("reverb")
         r.add_argument("--room", choices=list(ROOMS),
                        help="reverb preset; 'clip' matches source-materials/video_2026-10-22_02-40-39.mp4 (default cathedral)")
-        r.add_argument("--reverb", type=float, metavar="N", help="wet amount: 1 = the room's normal level, 0 = dry, 2 = drenched")
-        r.add_argument("--reverb-time", type=float, metavar="S", help="decay time (RT60) in seconds, overriding the room")
-        r.add_argument("--reverb-tone", type=float, metavar="N", help="tail colour: 0 bright .. 1 dark")
-        r.add_argument("--predelay", type=float, metavar="MS", help="gap before the tail starts, in milliseconds")
-        sp.add_argument("-j", "--jobs", type=int, default=0, help="parallel workers (0 = one per core, 1 = no parallelism)")
+        r.add_argument("--reverb", type=_nonnegative_float, metavar="N", help="wet amount: 1 = the room's normal level, 0 = dry, 2 = drenched")
+        r.add_argument("--reverb-time", type=_nonnegative_float, metavar="S", help="decay time (RT60) in seconds, overriding the room")
+        r.add_argument("--reverb-tone", type=_unit_float, metavar="N", help="tail colour: 0 bright .. 1 dark")
+        r.add_argument("--predelay", type=_nonnegative_float, metavar="MS", help="gap before the tail starts, in milliseconds")
+        sp.add_argument("--no-master", action="store_true", help="preserve raw mix gain; pair with --format float32")
+        sp.add_argument("--format", choices=("pcm16", "float32"), default="pcm16", help="WAV sample format (default pcm16)")
+        sp.add_argument("-j", "--jobs", type=_nonnegative_int, default=0, help="parallel workers (0 = one per core, 1 = no parallelism)")
         sp.add_argument("--tone", type=_tones, metavar="SPEC",
                         help="tonal markers for every word, e.g. pain:0.8,scream:0.5 (pain scream anger fear whimper)")
 
@@ -321,14 +460,16 @@ def main(argv=None):
     sp.add_argument("score")
     sp.add_argument("-o", "--output", help="WAV to write (default seraphim.wav unless --play)")
     sp.add_argument("-p", "--play", action="store_true", help="play it through the speakers")
-    sp.add_argument("--stems", metavar="DIR", help="also write each voice dry")
+    sp.add_argument("--stems", metavar="DIR", help="also write each voice dry, preserving its gain")
+    sp.add_argument("--normalize-stems", action="store_true", help="normalize stems independently (for auditioning)")
+    sp.add_argument("--preview", metavar="HTML", help="self-contained player with timed words and solo voices")
     sp.add_argument("--no-choir", action="store_true", help="skip the three praise voices")
     sp.add_argument("--no-space", action="store_true", help="plain stereo instead of binaural")
     sp.add_argument("--reverse-4d", action="store_true", help="play 4D-moved morphemes backwards")
-    sp.add_argument("--choir-level", type=float)
-    sp.add_argument("--tempo", type=float, help="speed factor, e.g. 1.3 (overrides the score's @tempo)")
-    sp.add_argument("--glitter", type=float, default=1.0, help="extra-bright glitter level (0 = off)")
-    sp.add_argument("--hum", type=float, default=0.3, help="closed/null mouths hum at this level (0 = silent, as in the video)")
+    sp.add_argument("--choir-level", type=_nonnegative_float)
+    sp.add_argument("--tempo", type=_positive_float, help="speed factor, e.g. 1.3 (overrides the score's @tempo)")
+    sp.add_argument("--glitter", type=_nonnegative_float, default=1.0, help="extra-bright glitter level (0 = off)")
+    sp.add_argument("--hum", type=_nonnegative_float, default=0.3, help="closed/null mouths hum at this level (0 = silent, as in the video)")
     sp.add_argument("-v", "--voice", type=_voice, help=VOICE_HELP)
     knob_opts(sp)
     sp.add_argument("-q", "--quiet", action="store_true")
@@ -338,7 +479,16 @@ def main(argv=None):
     sp = sub.add_parser("check", help="analyse a score: gematria, phonemes, syllables, rule breaks")
     sp.add_argument("score")
     common(sp)
+    sp.add_argument("--strict", action="store_true", help="fail on phonological rule violations")
+    sp.add_argument("--json", action="store_true", help="structured diagnostics")
     sp.set_defaults(func=cmd_check)
+
+    sp = sub.add_parser("inspect", help="show resolved render settings and word timings as JSON")
+    sp.add_argument("score")
+    sp.add_argument("-v", "--voice", type=_voice, help=VOICE_HELP)
+    knob_opts(sp)
+    common(sp)
+    sp.set_defaults(func=cmd_inspect)
 
     sp = sub.add_parser("say", help="render a single word given on the command line")
     sp.add_argument("--top")
@@ -382,6 +532,7 @@ def main(argv=None):
     sp = sub.add_parser("translate", help="English -> Seraphim (needs spaCy)")
     sp.add_argument("text", nargs="*", help="English text (default: stdin)")
     lang_opts(sp)
+    sp.add_argument("--strict", action="store_true", help="reject unsupported constructions reported as warnings")
     sp.set_defaults(func=cmd_translate)
 
     sp = sub.add_parser("gloss", help="gloss line -> Seraphim, e.g. 'NPFV NEG.ever 1S comprehend-OBJ ABS-Aghma_Shwa CON-allure'")
@@ -393,6 +544,7 @@ def main(argv=None):
     sp = sub.add_parser("read", help="Seraphim score -> gloss -> rough English")
     sp.add_argument("score")
     common(sp)
+    sp.add_argument("--strict", action="store_true", help="fail on unknown morphemes or a broken word chain")
     sp.set_defaults(func=cmd_read)
 
     sp = sub.add_parser("write", help="Seraphim orthography (terminal, or --html page)")
@@ -407,12 +559,13 @@ def main(argv=None):
     sp.add_argument("tokens", nargs="*")
     sp.add_argument("--pos")
     sp.add_argument("--grep")
+    sp.add_argument("--replace", action="store_true", help="overwrite an existing user entry")
     sp.set_defaults(func=cmd_lexicon)
 
     args = p.parse_args(argv)
     try:
         args.func(args)
-    except ScoreError as e:
+    except (ScoreError, GrammarError, OSError) as e:
         sys.exit(f"seraphim: {e}")
 
 

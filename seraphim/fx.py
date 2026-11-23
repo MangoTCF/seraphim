@@ -17,6 +17,23 @@ def sos_lowpass(fc, sr=SR):
     return design(2, fc, "lowpass", sr)
 
 
+def deess(audio, sr=SR):
+    """Gently tame sustained sibilance before adding phonemic brightness.
+
+    A slow envelope avoids switching at consonant boundaries. Low-level
+    breath and vowel detail pass through unchanged; dialect wound whistles
+    and brightness are added after this stage.
+    """
+    # Complementary split: subtracting an independently phase-shifted
+    # high-pass can boost frequencies around the crossover instead.
+    low = sosfilt(design(1, 3800, "lowpass", sr), audio)
+    high = audio - low
+    power = sosfilt(design(1, 25, "lowpass", sr), high * high)
+    rms = np.sqrt(np.maximum(power, 0))
+    gain = np.minimum(1.0, (0.025 / np.maximum(rms, 1e-9)) ** 0.45)
+    return audio + high * (gain - 1)
+
+
 def high_shelf(x, freq, gain_db, sr=SR):
     A = 10 ** (gain_db / 40)
     w = 2 * np.pi * freq / sr

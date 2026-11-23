@@ -3,6 +3,7 @@
 __pycache__/
 *.egg-info/
 build/
+dist/
 
 # media: renders, saved favourites, research downloads, third-party clips
 out/
@@ -11,3 +12,6 @@ src/
 source-materials/
 *.wav
 *.mp4
+
+# local voicebank source material
+vocaloid-vbanks/

@@ -25,13 +25,18 @@ import random
 import re
 from dataclasses import dataclass, field
 
-from .lexicon import Lexicon, PRONOUNS
+from .lexicon import Lexicon, POS_VALUES, PRONOUNS
 
 ASPECTS = {"PERF", "NPFV", "NMPF", "PFV", "PROG", "HAB", "IMP", "IRR"}   # IMP, IRR: moods, extensions
 CASES = {"NOM", "ABSV", "INS", "ABS", "CON", "DAT", "LOC", "ABL", "ALL", "TRAL", "VOC", "AVR", "BEN"}
 TRANSITIVIZERS = {"OBJ", "BEN", "MAL", "INS", "DAT", "DIS", "ORN"}
 PRO = {"COMP": "PRO:COMP", "T": "PRO:T", "NEG": "PRO:NEG", "V": "PRO:V", "K": "PRO:K",
        "N": "PRO:N", "ADJ": "PRO:ADJ", "ADV": "PRO:ADV", "CONJ": "PRO:CONJ", "INTJ": "PRO:INTJ"}
+CATEGORIES = POS_VALUES - {"-", "PRON"}
+
+
+class GrammarError(ValueError):
+    """A gloss that cannot be parsed into the grammar."""
 TENSES = ("farpast", "gnomic", "nearpast", "nonpast")
 TENSE_ALIASES = {"fpst": "farpast", "gnom": "gnomic", "pst": "nearpast", "past": "nearpast",
                  "npst": "nonpast", "npres": "nonpast", "present": "nonpast"}
@@ -81,7 +86,7 @@ def _norm_tense(t):
     t = t.lower()
     t = TENSE_ALIASES.get(t, t)
     if t not in TENSES:
-        raise ValueError(f"unknown tense {t!r}")
+        raise GrammarError(f"unknown tense {t!r}; known: {', '.join(TENSES)}")
     return t
 
 
@@ -128,7 +133,14 @@ def categorize(pieces, lexicon=None):
         nxt = nxt_raw.split(":")[0].split("^")[0]
         nxt_pos = nxt_raw.partition(":")[2].split("^")[0]
         if pos:
-            cat = {"PRON": "N"}.get(pos.upper(), pos.upper())
+            p = pos.upper()
+            if p == "PRON":
+                cat = "N"
+            elif p in CATEGORIES:
+                cat = p
+            else:
+                known = ", ".join(sorted(CATEGORIES | {"PRON"}))
+                raise GrammarError(f"unknown category {pos!r} on {gloss!r}; known: {known}")
         elif base in ("COMP", "Q", "IF"):
             cat = "COMP"
         elif pos.upper() == "INTJ":
@@ -177,13 +189,19 @@ def clause_from_gloss(text, tense="nonpast", lexicon=None):
 
 def spell_out(sent):
     """Group terminals two by two into words with their pro-forms."""
+    def pro(cat):
+        try:
+            return PRO[cat]
+        except KeyError:
+            raise GrammarError(f"cannot spell out unknown category {cat!r}") from None
+
     terms = sent.terms
     words = []
     for k in range(0, len(terms), 2):
         pair = terms[k:k + 2]
-        top = "START" if k == 0 else PRO[pair[0].cat]
+        top = "START" if k == 0 else pro(pair[0].cat)
         nxt = terms[k + 2] if k + 2 < len(terms) else None
-        w = SWord(top, pair[0], pair[1] if len(pair) > 1 else None, PRO[nxt.cat] if nxt else None, index=len(words))
+        w = SWord(top, pair[0], pair[1] if len(pair) > 1 else None, pro(nxt.cat) if nxt else None, index=len(words))
         words.append(w)
     sent.words = words
     return words
@@ -197,12 +215,18 @@ def move_4d(sent):
     verb = next((t for t in terms if t.role == "main"), None)
     verb = verb or next((t for t in terms[2:main_end] if t.role == "verb"), None)
     subj = next((t for t in terms if t.role == "mainsubj"), None)
-    explicit = any(t.role in ("main", "mainsubj") for t in terms)
-    if verb and subj is None and not explicit:
+    if verb and subj is None:
         vi = terms.index(verb)
-        cand = terms[vi - 1] if vi > 2 else None
-        if cand is not None and cand.role == "subj":
-            subj = cand
+        # A subject may be separated from its verb by negation or an adverb.
+        subj = next((t for t in terms[2:vi] if t.role == "subj"), None)
+        # Otherwise the first unmarked nominal before the verb is the subject.
+        if subj is None:
+            for i, t in enumerate(terms[2:vi], 2):
+                prev = terms[i - 1]
+                if t.cat == "N" and not t.role and not t.trace \
+                        and not (prev.cat == "K" and prev.gloss.endswith("-")):
+                    subj = t
+                    break
     if not verb:
         return False
     c, spec = terms[0], terms[1]
@@ -296,8 +320,15 @@ def to_sera(sentences, lexicon, title="", vary=True, seed=0, dialect=None):
     heresy = bool(dialect) and dialects.get(dialect).heresy
     v = Varier(seed, heresy) if vary else (lambda toks: toks)
     out = []
+    used = set()
+
+    def tokens(gloss, pos=None):
+        result = lexicon.tokens(gloss, pos)
+        used.update(lexicon.dependencies(gloss))
+        return result
+
     if title:
-        out.append(f"@title: {title}")
+        out.append(f"@title: {' '.join(title.split()).replace('#', '♯')}")
     if dialect:
         out.append(f"@dialect: {dialect}")
     for si, s in enumerate(sentences):
@@ -308,23 +339,26 @@ def to_sera(sentences, lexicon, title="", vary=True, seed=0, dialect=None):
         for k, w in enumerate(s.order or s.words):
             mark = "+".join(w.eff) + tone + (" stammer" if s.stammer and k == 0 else "")
             out.append(f"word {mark}    # {w.index + 1}: {w.top} / {_g(w.m1)} / {_g(w.m2)} / {w.end or '-'}")
-            out.append(f"  top: {' '.join(v(lexicon.tokens(w.top)))}")
+            out.append(f"  top: {' '.join(v(tokens(w.top)))}")
             for name, t in (("1", w.m1), ("2", w.m2)):
                 if t is None or t.silent:
                     out.append(f"  {name}:   Ø")
                     continue
                 if t.parts and t.gloss.endswith(".NOM"):
-                    toks = sum((lexicon.tokens(p.gloss, _pos(p)) for p in t.parts), [])
+                    toks = sum((tokens(p.gloss, _pos(p)) for p in t.parts), [])
                 elif t.parts:
                     toks = []
                     for k, p in enumerate(t.parts):
-                        toks += (["-"] if k else []) + lexicon.tokens(p.gloss, _pos(p))
+                        toks += (["-"] if k else []) + tokens(p.gloss, _pos(p))
                 else:
-                    toks = lexicon.tokens(t.gloss, _pos(t))
+                    toks = tokens(t.gloss, _pos(t))
                 out.append(f"  {name}:   {'~ ' if t.moved else ''}{' '.join(v(toks))}")
-            out.append(f"  end: {' '.join(v(lexicon.tokens(w.end))) if w.end else 'Ø'}")
+            out.append(f"  end: {' '.join(v(tokens(w.end))) if w.end else 'Ø'}")
         out.append("")
-    return "\n".join(out)
+    from .lexicon import snapshot_hash, snapshot_json
+    entries = {g: {"pos": lexicon.entries[g].pos, "tokens": lexicon.entries[g].tokens} for g in sorted(used)}
+    header = ["@format: 1", "@lexicon: " + snapshot_json(entries), "@lexicon_hash: " + snapshot_hash(entries)]
+    return "\n".join(header + out)
 
 
 def _g(t):

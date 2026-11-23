@@ -1,0 +1,67 @@
+@format: 1
+@lexicon: {"1S":{"pos":"PRON","tokens":["\u05d7\u05db\u05d6\u2600","\u05e6\u05e8"]},"2S":{"pos":"PRON","tokens":["\u05db\u05d2\u05d5\u05d9\u05d9","\u05d4\u05d9\u2622"]},"ABS-":{"pos":"K","tokens":["\u05d0\u05d9\u05d3\u2600","\u05d6\u05d5"]},"CON-":{"pos":"K","tokens":["\u05d4\u05d5\u05d9\u05d4","\u05d0\u05dc\u05d5\u05e7\u05d9\u05dd\u2600","\u05d7\u05db\u05d6"]},"IMP":{"pos":"T","tokens":["\u05e0\u05d0","\u05d0\u05e0\u05d0\u2622"]},"NOM":{"pos":"-","tokens":["\u05dc\u05db\u05bc\u05d3\u05bc"]},"NPFV":{"pos":"T","tokens":["\u05d0\u05d3\u05bc\u05d1","\u05dc\u05db\u05bc\u05d3\u05bc\u2600"]},"PRO:K":{"pos":"-","tokens":["\u05d0\u05dc\u05d5\u05e7\u05d9\u05dd","\u05d2\u2600","\u05e4\u05d3\u05d1"]},"PRO:N":{"pos":"-","tokens":["\u05d0\u05dc\u05d5\u05e7\u05d9\u05dd\u2600","\u05e4\u05d3\u05d1"]},"PRO:T":{"pos":"-","tokens":["\u05d0\u05dc\u05d5\u05e7\u05d9\u05dd","\u05d4\u05d1\u05d0\u2600"]},"PRO:V":{"pos":"-","tokens":["\u05d0\u05dc\u05d5\u05e7\u05d9\u05dd\u2622","\u05d0\u05dc\u05d5\u05e7\u05d9\u05dd"]},"START":{"pos":"-","tokens":["\u05d0\u05dc\u05d5\u05e7\u05d9\u05dd","\u05d1\u05d5\u05e8","\u05d0\u05dc\u05d5\u05e7\u05d9\u05dd\u2622","\u05de\u05d4"]},"VOC-":{"pos":"K","tokens":["\u05e0\u05e1\u05d9","\u05d4\u05d9\ud83d\udd06","\u05d2\u05d3\u05dc\u05d4"]},"close":{"pos":"ADV","tokens":["\u05d5\u05dc\u05d5","\u05d1\u05d0\u05d7\u05d3\u2622"]},"come":{"pos":"V","tokens":["\u05d2\u05d3\u05dc\u05d5\u2600","\u05d5\u05d6\u05dd","\u05e0\u05d5\u05dc\ud83d\udd06","\u05d5\u05d6\u05dd","\u05d4\u05d3\u05d1\u05e8\u05d9\u05dd","\u05d2\u05d3\u05dc\u05d5\u2600","\u05de\u05e0\u05d7\u05d5\u05ea"]},"heart":{"pos":"N","tokens":["\u05dc\u05d1","\u05d0\u05de\u05ea\u2600"]},"love":{"pos":"V","tokens":["\u05d0\u05d4\u05d1\u05d4","\u05d0\u05de\u05ea\ud83d\udd06"]},"obey":{"pos":"V","tokens":["\u05ea\u05db\u05dc\u05d9\u05ea","\u05d2\u05d3\u05dc\u05d5\ud83d\udd06"]}}
+@lexicon_hash: 2a6f35e636a7d8734296544f474879cd9207cb2a2416a50e61c0709f30825ac9
+@title: Come closer, my love. Your heart obeys.
+@dialect: cupid
+# Come closer
+word nonpast    # 1: START / IMP-come / 2S.NOM / PRO:T
+  top: אלוקים בור אישן☢ מה
+  1:   ~ נא אנא☢ - גדלו☀ וזם נול🔆 דטם הדברים גם☀ מנחות
+  2:   ~ כגויי הי☢ לכּדּ
+  end: אדון הבא☀
+word nonpast    # 2: PRO:T / t / close / PRO:V
+  top: אפקיד הג☀
+  1:   Ø
+  2:   ולו באחד☢
+  end: אנכי☢ אחתי
+word nonpast    # 3: PRO:V / t / t / -
+  top: אתה☢ אשא
+  1:   Ø
+  2:   Ø
+  end: Ø
+
+---
+# my love
+word nonpast    # 1: START / Ø / Ø / PRO:K
+  top: אקרא בנבל אליך☢ הלי
+  1:   Ø
+  2:   Ø
+  end: אמן ג☀ פדב
+word nonpast    # 2: PRO:K / VOC- / CON- / PRO:N
+  top: את גויתי☀ ויע
+  1:   נסי זח🔆 גדלה
+  2:   הויה א☀ חכז
+  end: אלך☀ לנו
+word nonpast    # 3: PRO:N / love / ABS- / PRO:N
+  top: אך☀ נלו
+  1:   אהבה אמת🔆
+  2:   איד☀ זו
+  end: אש☀ ונל
+word nonpast    # 4: PRO:N / 1S / - / -
+  top: אהבוך☀ פו
+  1:   ח☀ צר
+  2:   Ø
+  end: Ø
+
+---
+# Your heart obeys
+word nonpast    # 1: START / NPFV-obey / heart.NOM / PRO:T
+  top: אחריך בנאות אירא☢ וטל
+  1:   ~ אדּב לכּדּ☀ - תכלית אאא🔆
+  2:   ~ לב אחסר☀ לכּדּ
+  end: אשר אז☀
+word nonpast    # 2: PRO:T / t / CON- / PRO:N
+  top: אדון חיי☀
+  1:   Ø
+  2:   זטי אך☀ חדריו
+  end: אישן☀ ויע
+word nonpast    # 3: PRO:N / t / ABS- / PRO:N
+  top: אך☀ נלו
+  1:   Ø
+  2:   וגו☀ הח
+  end: אחתי☀ ונל
+word nonpast    # 4: PRO:N / 2S / t / -
+  top: אחתי☀ ויע
+  1:   כלה וט☢
+  2:   Ø
+  end: Ø

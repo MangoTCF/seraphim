@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#17151d"><title>Seraphim · Voice workbench</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script><script src="/studio.js" defer></script></head>
+<body><header class="topbar"><a class="brand" href="/" aria-label="Seraphim home"><span class="brandmark">✳</span><span>SERAPHIM<small>Seven voices. One utterance.</small></span></a><nav class="local" aria-label="Project"><button class="textbutton" id="dictionary-open">Dictionary</button><a class="textbutton" href="/docs">Documentation</a></nav><button class="iconbutton" id="theme" aria-label="Toggle light and dark theme">◐</button></header>
+<main><section class="intro"><div><span class="eyebrow">THE VOICE LAB</span><h1>Give the ineffable a voice<span>.</span></h1><p>Compose a thought. Shape its sound. Meet the seven mouths that speak it.</p></div><div class="edition">FORMANT SYNTHESIS<br><b>Four mouths + three prayers</b></div></section>
+<div class="workspace"><aside class="editor panel"><div class="sectionhead"><h2><span class="step">01</span> Compose</h2><button class="textbutton" id="open">Open file ↗</button><input type="file" id="file" accept=".sera,.txt" hidden></div>
+<div class="segments" role="group" aria-label="Input language"><button data-mode="english" aria-pressed="false">English</button><button data-mode="gloss" aria-pressed="false">Gloss</button><button data-mode="score" aria-pressed="true">Score</button></div>
+<label class="fieldlabel" for="text">Your score <span id="inputhint">Editable .sera notation</span></label><textarea id="text" spellcheck="false" aria-label="Composition text" placeholder="Open an example to begin…"></textarea>
+<div class="studio-actions"><button class="secondary" id="prepare-score" disabled>Prepare score</button><button class="textbutton" id="export-draft" disabled>Download .sera</button></div>
+<div class="exampleline"><label for="example">Try a score</label><select id="example"><option value="">Choose an example…</option></select></div>
+<div class="sectionhead soundhead"><h2><span class="step">02</span> Shape the sound</h2><button class="textbutton" id="reset">Reset</button></div>
+<div class="fields"><label>Character<select id="dialect"><option value="">From score · seraphic default</option><option value="seraphic">Seraphic · celestial</option><option value="cupid">Cupid · beguiling</option><option value="succubus">Succubus · intimate</option><option value="nephilim">Nephilim · divided</option><option value="demonic">Demonic · fallen</option></select></label><label>Space<select id="room"><option value="">From score · cathedral default</option><option value="cathedral">Cathedral</option><option value="clip">Clip</option><option value="hall">Concert hall</option><option value="plate">Plate</option><option value="room">Small room</option><option value="dry">Dry</option></select></label></div>
+<div class="sliderfield"><label for="voice">Voice character <output id="voice-value">From score</output></label><input id="voice" type="range" min="-1" max="1" step="0.05" value="0"><div class="rangeends"><span>Masculine</span><span>Androgynous</span><span>Feminine</span></div></div>
+<div class="sliderfield"><label for="tempo">Tempo <output id="tempo-value">From score</output></label><input id="tempo" type="range" min="0.25" max="3" step="0.05" value="1"></div>
+<div class="renderdock"><div class="renderactions"><button class="primary" id="render"><span>✦</span> Render voices <span>↗</span></button><button class="secondary" id="cancel" hidden>Cancel</button></div><p class="rendernote" id="storage-note">Drafts and dictionary overrides are saved in this browser.</p><div class="jobstatus" id="status" role="status" aria-live="polite">Choose an example, or write something of your own.</div></div>
+<details><summary>Fine tuning <span>＋</span></summary><div class="fields advanced"><label>Reverb amount <input id="reverb" type="number" min="0" max="2" step="0.1" placeholder="From score"></label><label>Random seed<input id="seed" type="number" value="0" step="1"></label><label id="tenselabel">Gloss tense<select id="tense"><option value="nonpast">Non-past · Latin</option><option value="nearpast">Near past · Greek</option><option value="farpast">Far past · Aramaic</option><option value="gnomic">Gnomic · Aramaic</option></select></label></div><label class="switchline"><input id="choir" type="checkbox" checked> Include the three prayer voices</label></details>
+<details id="authoring"><summary>Score generation <span>＋</span></summary><p class="controlhelp">English and gloss only. Raw scores can be edited directly above.</p><div class="fields advanced"><label>Title<input id="title" type="text" placeholder="From input"></label><label>Speak these first<input id="front" type="text" placeholder="cheese light"></label><label>Shuffle seed<input id="shuffle" type="number" step="1" placeholder="Keep tree order"></label></div><label class="switchline"><input id="move" type="checkbox" checked> Apply 4D grammar movement</label><label class="switchline"><input id="strict" type="checkbox"> Strict English translation</label></details>
+<label class="switchline permission"><input id="heresy" type="checkbox"> Allow divine names as phonemes</label><p class="controlhelp">Dialect permissions still apply; fallen dialects already allow these.</p>
+<div id="synthcontrols"></div>
+</aside>
+<section class="listen"><div class="angelpanel panel"><div class="sectionhead"><h2><span class="step">03</span> Behold & listen</h2><span class="pill" id="dialectbadge">Awaiting a voice</span></div><div class="visualtitle"><span class="eyebrow">THE SEVENFOLD VOICE</span><h3 id="nowword">A chorus, waiting to begin.</h3><p id="nowdetail">Each mouth has a place. Each word has seven voices.</p></div><div class="angelstage"><svg id="angel" data-dialect="seraphic" viewBox="0 0 700 620" role="group" aria-label="Schematic six-winged angel with seven mouths at the vertices of a regular heptagon">
+  <defs><radialGradient id="halo"><stop stop-color="var(--speaker-ink)" stop-opacity=".13"/><stop offset="1" stop-color="var(--speaker-ink)" stop-opacity="0"/></radialGradient><linearGradient id="wing" x2="0" y2="1"><stop stop-color="var(--speaker-ink)" stop-opacity=".22"/><stop offset="1" stop-color="var(--speaker-ink)" stop-opacity=".025"/></linearGradient></defs>
+  <circle cx="350" cy="303" r="282" fill="url(#halo)"/><g class="orbits"><circle cx="350" cy="303" r="194"/><circle cx="350" cy="303" r="207"/><circle cx="350" cy="303" r="133" stroke-dasharray="2 9"/><path d="M350 72V534M118 303H582" stroke-dasharray="2 10"/></g>
+  <g class="speaker-art" data-form="seraphic" aria-hidden="true">
+    <g id="wings" fill="url(#wing)" stroke="var(--outline)"><path id="leftwing" d="M345 315 Q267 151 106 164 Q119 238 179 272 Q138 219 137 193 Q217 213 278 286 Q203 227 163 226 Q196 285 257 305 Q213 278 191 253 Q268 280 345 315Z"/><use href="#leftwing" transform="translate(700 0) scale(-1 1)"/><use href="#leftwing" transform="rotate(-35 350 310)"/><use href="#leftwing" transform="translate(700 0) scale(-1 1) rotate(-35 350 310)"/><use href="#leftwing" transform="rotate(-73 350 310)"/><use href="#leftwing" transform="translate(700 0) scale(-1 1) rotate(-73 350 310)"/></g>
+    <g class="centraleye"><ellipse cx="350" cy="303" rx="58" ry="66"/><path d="M306 303Q350 264 394 303Q350 342 306 303Z"/><circle cx="350" cy="303" r="15"/><circle cx="350" cy="303" r="5" fill="var(--primary)"/><path d="M350 228V214M350 378V392M281 303H267M419 303H433"/></g>
+  </g>
+  <g class="speaker-art" data-form="cupid" aria-hidden="true">
+    <g class="speaker-wings">
+      <path id="cupid-wing" d="M326 317C278 306 220 268 163 205C165 242 187 275 219 295L183 282Q204 319 251 332L220 331Q255 364 326 317Z"/>
+      <use href="#cupid-wing" transform="translate(700 0) scale(-1 1)"/>
+      <path d="M350 278C323 245 288 280 307 310Q321 333 350 354Q379 333 393 310C412 280 377 245 350 278Z"/>
+    </g>
+    <g class="speaker-lines">
+      <path id="cupid-feathers" d="M326 317Q268 305 219 295M326 317Q290 334 251 332"/>
+      <use href="#cupid-feathers" transform="translate(700 0) scale(-1 1)"/>
+      <ellipse cx="350" cy="231" rx="27" ry="7"/>
+      <path d="M302 355 407 250M393 251 407 250 406 264M307 350 294 350 286 358 299 358 299 371 307 363Z"/>
+      <path d="M350 369V385M342 377H358"/>
+    </g>
+  </g>
+  <g class="speaker-art" data-form="demonic" aria-hidden="true">
+    <g class="speaker-wings">
+      <path id="demon-wing" d="M337 321Q266 194 114 153Q158 206 117 259Q174 237 181 298Q218 270 245 334Q285 309 337 321Z"/>
+      <use href="#demon-wing" transform="translate(700 0) scale(-1 1)"/>
+      <path id="demon-horn" d="M340 258Q284 245 283 208Q282 189 300 177Q292 202 317 216Q338 227 340 258Z"/>
+      <use href="#demon-horn" transform="translate(700 0) scale(-1 1)"/>
+    </g>
+    <g class="speaker-lines">
+      <path id="demon-ribs" d="M337 321Q239 244 114 153M337 321Q241 235 117 259M337 321Q240 270 181 298M337 321Q282 298 245 334M337 247Q292 217 300 177"/>
+      <use href="#demon-ribs" transform="translate(700 0) scale(-1 1)"/>
+      <path d="M350 231 403 263 393 334 350 381 307 334 297 263Z M350 249 386 272 379 326 350 359 321 326 314 272Z"/>
+      <path d="M318 298 350 284 382 298 350 315Z M350 288 355 298 350 309 345 298Z" fill="url(#wing)"/>
+      <path d="M350 218V209M350 395V404M286 299H272M414 299H428" stroke-dasharray="3 4"/>
+    </g>
+  </g>
+  <g class="speaker-art" data-form="succubus" aria-hidden="true">
+    <g class="speaker-wings">
+      <path id="succubus-wing" d="M343 320C291 242 225 255 156 187C155 229 174 254 210 274Q165 272 145 248Q158 299 229 313Q190 322 167 308C202 359 269 352 343 320Z"/>
+      <use href="#succubus-wing" transform="translate(700 0) scale(-1 1)"/>
+      <path id="succubus-horn" d="M332 263Q300 249 301 220Q308 235 322 238Q336 243 332 263Z"/>
+      <use href="#succubus-horn" transform="translate(700 0) scale(-1 1)"/>
+      <path d="M350 270C327 247 308 276 319 297Q328 314 350 331Q372 314 381 297C392 276 373 247 350 270Z"/>
+    </g>
+    <g class="speaker-lines">
+      <path id="succubus-ribs" d="M343 320Q257 284 210 274M343 320Q268 330 229 313M331 331Q297 366 252 356Q225 348 230 330"/>
+      <use href="#succubus-ribs" transform="translate(700 0) scale(-1 1)"/>
+      <path d="M322 293Q339 280 350 289Q361 280 378 293Q350 309 322 293Z M323 293Q350 297 377 293"/>
+      <path d="M350 331C395 354 377 396 348 386C331 380 333 361 346 358M346 358 337 357 350 349 355 363Z"/>
+      <circle cx="350" cy="297" r="72" stroke-dasharray="1 6"/>
+      <circle cx="350" cy="219" r="3"/><circle cx="350" cy="404" r="3"/>
+    </g>
+  </g>
+  <g class="speaker-art" data-form="nephilim" aria-hidden="true">
+    <g class="speaker-wings">
+      <path id="nephilim-feathers" d="M335 313Q280 188 123 167Q148 211 205 237L166 229Q187 264 249 285L209 280Q253 318 335 313Z"/>
+      <use href="#nephilim-feathers" transform="rotate(-44 350 310)"/>
+      <path id="nephilim-shards" d="M368 317 429 233 567 164 524 239 498 243 467 292 434 286 410 323Z"/>
+      <use href="#nephilim-shards" transform="rotate(44 350 310)"/>
+    </g>
+    <g class="speaker-lines">
+      <path id="nephilim-feather-ribs" d="M335 313Q256 232 123 167M335 313Q270 254 205 237M335 313Q285 296 249 285"/>
+      <use href="#nephilim-feather-ribs" transform="rotate(-44 350 310)"/>
+      <path id="nephilim-shard-ribs" d="M368 317 458 245 567 164M458 245 524 239M458 245 467 292M434 286 429 233"/>
+      <use href="#nephilim-shard-ribs" transform="rotate(44 350 310)"/>
+      <path d="M340 238A58 65 0 0 0 340 368M360 238 399 272 407 303 399 334 360 368M350 226 344 279 356 301 344 327 350 380"/>
+      <path d="M341 287Q322 287 306 303Q321 317 341 317M359 287 394 303 359 317"/>
+      <path d="M337 295A8 8 0 1 0 337 311M363 295 373 303 363 311Z" fill="url(#wing)"/>
+    </g>
+  </g>
+  <polygon id="heptagon" class="polygon"/>
+  <g id="mouthnodes"></g>
+</svg></div>
+<div id="character-picker" class="studio-actions" aria-label="Speaker character" role="group"></div><div class="visuallegend"><span><i class="speechdot"></i> Speech mouths</span><span><i class="prayerdot"></i> Prayer voices</span><span>Click a mouth to solo</span></div><p class="prayer-key" id="prayer-key">Far past ↘ · Gnomic → · Near past ↗ · Non-past ∩</p><div class="inspector" id="inspector"><span class="eyebrow">ALL SEVEN VOICES</span><p>Render a score to see what each mouth says.</p></div>
+<details id="wordeditor" class="wordeditor" hidden><summary>Edit this word <span>＋</span></summary><p class="controlhelp">Edits become a portable score and apply on render. Mouth text uses the same notation as the score: ~ for moved speech, Ø for silence, and brightness marks after tokens.</p><div class="fields advanced"><label>Tense / stacked tenses<input id="word-tense" type="text" placeholder="farpast+nonpast"></label><label>Emotion intensities<input id="word-tone" type="text" placeholder="pain:0.8,fear:0.3"></label></div><label class="switchline"><input id="word-stammer" type="checkbox"> Stammer on this word</label><div id="word-mouth-fields"></div><p class="controlhelp" id="word-temporal"></p><div class="wordactions"><button class="primary" id="apply-word">Apply & render score ↗</button><button class="secondary" id="audition-word">Audition word</button><button class="textbutton" id="undo-word" disabled>Undo edit</button></div><p id="word-edit-status" class="controlhelp" role="status"></p></details>
+<div class="transport"><button id="play" class="playbutton" aria-label="Play" disabled>▶</button><div class="timeline"><div class="timelabel"><span id="trackname">Full ensemble</span><span><output id="clock">0:00</output><span class="muted"> / </span><output id="duration">0:00</output></span></div><input type="range" id="seek" aria-label="Playback position" min="0" max="1" step="0.01" value="0" disabled></div><button id="stop" class="iconbutton" aria-label="Stop" disabled>■</button><label class="volume">Vol<input type="range" id="volume" min="0" max="1" step="0.01" value="0.75" aria-label="Volume"></label></div><div class="trackrow"><label for="track">Listen to</label><select id="track" disabled><option value="mix">Full ensemble</option></select><a id="download" class="textbutton" hidden download="seraphim.wav">Save WAV ↓</a><a id="savebundle" class="textbutton" hidden download="seraphim-bundle.zip">Render bundle ↓</a><a id="offlinepreview" class="textbutton" hidden target="_blank" rel="noopener">Offline preview ↗</a><a id="savescore" class="textbutton" hidden download="score.sera">Save score ↓</a></div></div>
+<details class="panel" id="bankreport" hidden open><summary>Voicebank coverage <span>＋</span></summary><p class="controlhelp">Approximate pronunciations and formant fallbacks used by the selected recorded voices. Counts refer to planned rendering segments.</p><div id="bankreport-list"></div></details><details class="panel" id="grammarpanel" hidden><summary>Grammar · scope & tense <span>＋</span></summary><p class="controlhelp">Recovered tree spine in grammatical order. Mouth scope is top → 1 → 2 → end; spoken order can differ. Movement is undone for read-back. English prose remains approximate; exact tense labels are shown here.</p><div id="grammarview"></div></details><details class="panel resolvedpanel" id="resolvedpanel" hidden><summary>Resolved render settings <span>＋</span></summary><p class="controlhelp">The settings used for this recording, including inherited score and dialect values.</p><pre id="resolved"></pre><a id="saveplan" class="textbutton" download="plan.json">Save timing plan ↓</a></details><div class="scorepanel panel"><div class="sectionhead"><h2>Word by word</h2><span class="pill" id="wordcount">No score yet</span></div><p class="subtle">Select a word to inspect its mouths and seek in the recording.</p><div class="empty" id="empty"><span>✳</span><p>Your utterance will unfold here.</p><small>Four simultaneous morphemes. Three voices carrying tense.</small></div><div id="wordlist" class="wordlist"></div><details id="readingpanel" hidden><summary>Read-back & diagnostics <span>＋</span></summary><p id="reading"></p><pre id="diagnostics"></pre></details></div></section></div><footer class="site-footer">
+  <span>With <span class="footer-heart" aria-label="love">♥</span> by MangoTCF &amp; Gekko</span>
+  <a href="https://github.com/MangoTCF/seraphim">Seraphim on GitHub</a>
+</footer></main>
+<dialog class="studio-dialog" id="dictionary-dialog" aria-labelledby="dictionary-heading">
+  <div class="studio-head"><h2 id="dictionary-heading">Dictionary</h2><button class="textbutton" data-close="dictionary-dialog">Close</button></div>
+  <p id="dictionary-help">Search the installed dictionary or save your own pronunciation in this browser.</p>
+  <div class="studio-search" id="dictionary-search-row">
+    <label>Search<input id="dictionary-search" type="search" placeholder="Gloss, part of speech or tokens"></label>
+    <button class="secondary" id="dictionary-new">New entry</button>
+  </div>
+  <div id="dictionary-list" class="studio-list" aria-label="Dictionary entries"></div>
+  <form id="dictionary-form" class="studio-form" hidden>
+    <div class="studio-fields">
+      <label>Gloss<input id="dictionary-gloss" required spellcheck="false"></label>
+      <label>Part of speech<select id="dictionary-pos"></select></label>
+    </div>
+    <label>Pronunciation tokens<input id="dictionary-tokens" required spellcheck="false"></label>
+    <div class="studio-actions">
+      <button class="primary" id="dictionary-save">Save entry</button>
+      <button type="button" class="textbutton" id="dictionary-discard" disabled>Discard unapplied edits</button>
+      <button type="button" class="textbutton" id="dictionary-remove" hidden>Remove override</button>
+    </div>
+  </form>
+  <div class="studio-actions" id="review-actions" hidden>
+    <button class="primary" id="build-score">Accept suggestions and build score</button>
+  </div>
+  <p class="controlhelp" id="dictionary-status" role="status"></p>
+</dialog>
+<dialog class="studio-dialog score-dialog" id="score-dialog" aria-labelledby="score-heading">
+  <div class="studio-head"><h2 id="score-heading">Score editor</h2><button class="textbutton" data-close="score-dialog">Close</button></div>
+  <p id="score-title"></p>
+  <div class="studio-score-layout">
+    <div><div class="studio-list" id="score-navigation" aria-label="Score words"></div></div>
+    <form id="score-form" class="studio-form">
+      <div class="studio-fields">
+        <label>Tense<input id="score-tense" required placeholder="farpast+nonpast"></label>
+        <label>Tone<input id="score-tone" placeholder="pain:0.8,fear:0.3"></label>
+      </div>
+      <label class="switchline"><input type="checkbox" id="score-stammer"> Stammer</label>
+      <div class="studio-fields" id="score-mouths"></div>
+      <details><summary>Phoneme picker</summary>
+        <p class="controlhelp">Choose a mouth, then insert a numeric phoneme token at the cursor.</p>
+        <label>Mouth<select id="phoneme-mouth"></select></label>
+        <div class="studio-actions" id="phoneme-vowels" aria-label="Vowels"></div>
+        <div class="studio-actions" id="phoneme-consonants" aria-label="Consonants"></div>
+      </details>
+      <div class="studio-actions">
+        <button class="primary" id="score-save">Apply word edits</button>
+        <button type="button" class="textbutton" id="score-discard" disabled>Discard unapplied edits</button>
+      </div>
+      <div class="studio-actions">
+        <button type="button" class="secondary" data-arrange="insert">Insert after</button>
+        <button type="button" class="secondary" data-arrange="up">Move earlier</button>
+        <button type="button" class="secondary" data-arrange="down">Move later</button>
+        <button type="button" class="textbutton" data-arrange="delete">Delete word</button>
+        <button type="button" class="textbutton" id="score-undo">Undo</button>
+      </div>
+    </form>
+  </div>
+  <details id="score-source-panel"><summary>Score source and metadata</summary>
+    <form id="score-source-form" class="studio-form">
+      <label>.sera source<textarea id="score-source" rows="8" spellcheck="false"></textarea></label>
+      <div class="studio-actions">
+        <button class="primary" id="score-source-apply" disabled>Validate and apply source</button>
+        <button type="button" class="textbutton" id="score-source-discard" disabled>Discard source edits</button>
+      </div>
+    </form>
+  </details>
+  <p class="controlhelp" id="score-status" role="status"></p>
+  <details id="score-issues" hidden><summary>Pronunciation diagnostics</summary><pre id="score-diagnostics"></pre></details>
+  <div class="studio-actions"><button class="primary" id="score-render">Render score</button><button class="textbutton" id="score-download">Download .sera</button></div>
+</dialog>
+</body></html>

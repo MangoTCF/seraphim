@@ -7,7 +7,7 @@ movement is undone by putting the raised aspect, verb and subject back into
 the traces, and the recovered gloss is rendered as English.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .grammar import ASPECTS, CASES, TRANSITIVIZERS
 from .lexicon import PRONOUNS
@@ -25,6 +25,10 @@ NO_ARTICLE = {"heaven", "hell", "paradise", "eden", "sheol", "love", "darkness",
               "fire", "blood", "flesh", "joy", "glory"}
 STOPS = ("COMP", "IF", "AND")       # where a clause's tail of complements ends
 TRANS_PREP = {"-DAT": "to", "-BEN": "for", "-MAL": "against", "-INS": "by", "-DIS": "each of", "-ORN": "with"}
+# Adverbs that English prefers at the end of the clause rather than before
+# the verb: 'They will sing in the temple tomorrow', not 'They tomorrow will…'.
+END_ADV = {"today", "tomorrow", "yesterday", "tonight", "now", "then", "soon",
+           "later", "here", "there", "home"}
 IRREGULAR = {
     "be": ("was", "been"), "have": ("had", "had"), "do": ("did", "done"), "go": ("went", "gone"),
     "see": ("saw", "seen"), "eat": ("ate", "eaten"), "give": ("gave", "given"), "take": ("took", "taken"),
@@ -104,31 +108,35 @@ class RWord:
     end: str
     langs: list
     spoken: int
+    tenses: list = field(default_factory=list)
 
 
-def read_score(score, lexicon):
+def read_score(score, lexicon=None):
+    from .lexicon import score_lexicon
+    lexicon = score_lexicon(score, lexicon)
     index = lexicon.by_signature()
-    sentences, cur = [], []
+    sentences, cur, problems = [], [], []
     for i, w in enumerate(score.words):
         if w.sentence_start and cur:
-            sentences.append(cur)
+            sentences.append((cur, problems))
             cur = []
+            problems = []
         d = {m: decode_line(w.mouths[m], lexicon, index) for m in MOUTHS}
+        problems.extend(f"word {i + 1}, mouth {m}: unknown morpheme {v.gloss}" for m, v in d.items() if v and not v.known)
         cur.append(RWord(d["top"].gloss if d["top"] else "?", d["1"], d["2"],
-                         d["end"].gloss if d["end"] else None, w.langs, i + 1))
+                         d["end"].gloss if d["end"] else None, w.langs, i + 1, list(w.tenses)))
     if cur:
-        sentences.append(cur)
-    # Several sentences may be written without '---': split at each 'start'.
-    out = []
-    for s in sentences:
-        chunk = []
-        for w in s:
-            if w.top == "START" and any(c.top == "START" for c in chunk):
-                out.append(chunk)
-                chunk = []
-            chunk.append(w)
-        out.append(chunk)
-    return [reconstruct(s) for s in out]
+        sentences.append((cur, problems))
+    # Sentence breaks are explicit in the score (w.sentence_start, set by
+    # '---'); rendering uses the same flag, so the reader must not invent
+    # extra breaks at a repeated START.
+    readings = []
+    for sentence, issues in sentences:
+        r = reconstruct(sentence)
+        r["problems"] = issues + r["problems"]
+        r["lexicon"] = lexicon
+        readings.append(r)
+    return readings
 
 
 def reconstruct(words):
@@ -190,7 +198,8 @@ def reconstruct(words):
     terms += refill
     langs += [chain[0].langs] * len(refill)
     return dict(chain=chain, terms=terms, langs=langs, main_at=main_at, problems=problems,
-                tense=chain[0].langs)
+                tense=chain[0].langs, tenses=chain[0].tenses,
+                temporal=[dict(spoken=w.spoken, tenses=w.tenses) for w in chain])
 
 
 # ------------------------------------------------------------ English
@@ -292,6 +301,16 @@ class Realizer:
             else:
                 owned, _, i = self.np(toks, i, form, stop)
                 phrase = f"{owned} of {phrase}"
+        # A case-marked NP after a noun modifies it: 'the man with the dog',
+        # 'the book on the table'. This is how the translator spells a PP
+        # attached to a noun; without it the PP leaks into the verb phrase.
+        while i < stop and toks[i].endswith("-") and toks[i][:-1] in CASE_PREP:
+            c = toks[i][:-1]
+            mod, _, i = self.np(toks, i + 1, 1, stop)
+            if mod:
+                if c == "SIM" and mod.startswith("the "):
+                    mod = ("an " if mod[4:5] in "aeiou" else "a ") + mod[4:]
+                phrase = f"{phrase} {CASE_PREP[c]} {mod}"
         if i + 1 < stop and toks[i] == "AND" and self.pos(toks[i + 1]) != "V":
             other, _, i = self.np(toks, i + 1, form, stop)
             # 'my heart and my soul' -> 'my heart and soul'
@@ -371,11 +390,20 @@ class Realizer:
 
     def verb(self, v, aspect, langs, neg, subj):
         base, *prt = v.split(".")
+        modal = next((p[4:] for p in prt if p.startswith("MOD_")), None)
+        passive = "PASS" in prt
+        prt = [p for p in prt if p != "PASS" and not p.startswith("MOD_")]
         prt = "".join(" " + p for p in prt)
         past, part = IRREGULAR.get(base, (base + ("d" if base.endswith("e") else "ed"),) * 2)
         third = bool(subj) and subj not in ("I", "you", "we", "they") and not self.subj_plural
         tense = langs[0] if langs else "latin"
         never = neg == "NEG.ever"
+        if modal:
+            main = ("be " + part if passive else base) + prt
+            return modal + (" never " if never else " not " if neg else " ") + main
+        if passive:
+            be = ("was" if third or subj == "I" else "were") if tense != "latin" else ("am" if subj == "I" else "is" if third else "are")
+            return be + (" never " if never else " not " if neg else " ") + part + prt
         if aspect == "IMP":
             return ("never " if never else "do not " if neg else "") + base + prt
         if aspect == "PFV" and tense == "latin":
@@ -462,6 +490,19 @@ class Realizer:
         if i >= stop:
             self.depth -= 1
             return subj or "", i
+        # A raised subject sits above NegP, so negation and adverbs can follow it.
+        while i < stop:
+            if neg is None and toks[i].split(".")[0] == "NEG":
+                neg = toks[i]
+                i += 1
+            elif self.pos(toks[i]) == "ADV":
+                advs.append(toks[i])
+                i += 1
+            else:
+                break
+        if i >= stop:
+            self.depth -= 1
+            return subj or "", i
         v = toks[i]
         if i < len(self.langs) and self.langs[i]:
             langs = self.langs[i]
@@ -471,7 +512,7 @@ class Realizer:
         rest, i = self.tail(toks, i, stop)
         direct, trans, objs = self.last_direct, self.last_trans, self.last_objs
         verb = self.verb(v, aspect, langs, neg, subj)
-        if aspect == "IRR":
+        if aspect == "IRR" and ".MOD_" not in v:
             base = v.replace(".", " ")
             if comp == "if":        # counterfactual: 'if you were a person'
                 verb = "were" if v == "be" else IRREGULAR.get(v.split(".")[0], (v + "ed",))[0]
@@ -501,15 +542,17 @@ class Realizer:
         advs = [a.replace("_", " ") for a in advs]
         front = [a for a in advs if a == "please"]
         advs = [a for a in advs if a != "please"]
+        end_advs = [a for a in advs if a in END_ADV]
+        advs = [a for a in advs if a not in END_ADV]
         if aspect == "IMP":
-            out = front + advs + [verb] + rest
+            out = front + advs + [verb] + rest + end_advs
         elif question and top:
-            out = front + self.question(v, aspect, langs, neg, subj, advs) + rest
+            out = front + self.question(v, aspect, langs, neg, subj, advs) + rest + end_advs
         else:
             if v == "be" and objs and objs[0][1].startswith("the ") and len(objs) == 1 and objs[0][0] is None:
                 noun = objs[0][1][4:]
                 rest = [("an " if noun[:1] in "aeiou" else "a ") + noun] + rest[1:]   # 'a sinner', 'an obsession'
-            out = front + [subj or ""] + advs + [verb] + rest
+            out = front + [subj or ""] + advs + [verb] + rest + end_advs
         text = " ".join(x for x in [lead] + out if x)
         if question and top:
             text += "?"
@@ -523,6 +566,12 @@ class Realizer:
         """English do-support and inversion: 'how did you even manage …'."""
         base, *prt = v.split(".")
         main = " ".join([base] + prt)
+        modal = next((p[4:] for p in prt if p.startswith("MOD_")), None)
+        if modal:
+            main = " ".join([base] + [p for p in prt if not p.startswith("MOD_") and p != "PASS"])
+            if "PASS" in prt:
+                main = "be " + IRREGULAR.get(base, (base + "ed", base + "ed"))[1]
+            return ([self.wh] if self.wh else []) + [modal, subj or ""] + (["not"] if neg else []) + advs + [main]
         tense = langs[0] if langs else "latin"
         stmt = self.verb(v, aspect, langs, None, subj).split(" ")
         if base == "be":
@@ -557,7 +606,8 @@ def fronted(reading):
     return out
 
 
-def english(reading, lexicon):
+def english(reading, lexicon=None):
+    lexicon = reading.get("lexicon", lexicon)
     flat, flat_langs = [], []
     r = Realizer(lexicon, flat_langs, fronted(reading))
     for k, (t, l) in enumerate(zip(reading["terms"], reading["langs"])):

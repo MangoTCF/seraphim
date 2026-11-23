@@ -33,6 +33,8 @@ PREP_CASE = {
 POSS_PRED = {"mine": "1S", "yours": "2S", "hers": "3S", "ours": "1P", "theirs": "3P"}
 IDIOMS = {("adam", "apple"): "Adam's_apple"}      # possessive idioms kept whole
 IRREALIS_AUX = {"would", "could", "should", "might", "'d"}
+MODALS = {m: m for m in ("can", "could", "may", "might", "must", "shall", "should", "would")}
+MODALS.update({"ca": "can", "'d": "would"})
 ARCHAIC_IMPERATIVES = {"begone": "begone", "avaunt": "begone", "behold": "see", "hark": "hear", "lo": "see"}
 CRIES = {"oh", "ah", "ow", "ouch", "argh", "oy", "alas", "aah", "ahh", "ugh", "aaah"}
 PAIN_CUES = {"hurt", "pain", "break", "wound", "burn", "bleed", "suffer", "agony", "ache", "die", "kill",
@@ -55,7 +57,10 @@ def nlp():
             import spacy
         except ImportError:
             raise SystemExit("translation needs spaCy: pip install spacy && python -m spacy download en_core_web_sm")
-        _nlp = spacy.load("en_core_web_sm")
+        try:
+            _nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            raise SystemExit("translation needs the English model: python -m spacy download en_core_web_sm") from None
     return _nlp
 
 
@@ -75,20 +80,26 @@ class Translator:
         self.notes = []
         self.skip = set()      # tokens split off into their own utterance
 
+    def case_of(self, token):
+        if token.lower_ not in PREP_CASE:
+            self.notes.append(f"warning: unknown preposition {token.text!r} approximated as LOC-")
+        return PREP_CASE.get(token.lower_, "LOC")
+
     # -------------------------------------------------------- noun phrases
 
     def np(self, tok, case=None, subject=False):
         if tok.tag_ in ("WDT", "WP", "WP$") or tok.morph.get("PronType") == ["Rel"]:
             return []
         out = [case + "-"] if case else []
+        mark = "@mainsubj" if subject else ""
         if tok.lower_ in POSS_PRED:
-            return out + ["ABS-", POSS_PRED[tok.lower_] + ":PRON"]       # 'be mine'
+            return out + ["ABS-", POSS_PRED[tok.lower_] + ":PRON" + mark]       # 'be mine'
         if tok.pos_ == "PRON" or tok.lower_ in PRON:
             code = PRON.get(tok.lower_)
             if code is None:
                 code = tok.lemma_.lower()
                 self.notes.append(f"pronoun {tok.text!r} kept as a word")
-            return out + [code + ":PRON"]
+            return out + [code + ":PRON" + mark]
         kids = [c for c in tok.children if c not in self.skip]
         adjs = [c.lemma_.lower() + ":ADJ" for c in kids
                 if c.dep_ in ("amod", "nummod") or (c.dep_ == "advmod" and c.pos_ == "ADJ")]
@@ -108,7 +119,7 @@ class Translator:
         # Case markings first, then adjectives, then the word: CON- sweet one
         if poss or of:
             out.append("CON-")
-        out += adjs + [head + ":N"]
+        out += adjs + [head + ":N" + mark]
         for p in poss:
             out += self.np(p, "ABS")
         for p in of:
@@ -117,7 +128,7 @@ class Translator:
                     out += self.np(po, "ABS")
         for c in kids:
             if c.dep_ == "prep" and c.lower_ != "of":
-                cs = PREP_CASE.get(c.lower_, "LOC")
+                cs = self.case_of(c)
                 for po in c.children:
                     if po.dep_ == "pobj":
                         out += self.np(po, cs)
@@ -194,6 +205,8 @@ class Translator:
         never = any(n.lower_ in ("never", "nowhere", "nothing") for n in negs)
         perfect = any(a.lemma_ == "have" for a in aux) and v.tag_ == "VBN"
         prog = any(a.lemma_ == "be" for a in aux) and v.tag_ == "VBG"
+        if any(a.lower_ in MODALS for a in aux) and (perfect or prog):
+            self.notes.append("warning: modal perfect/progressive aspect is approximated; inspect the gloss")
         past = v.tag_ == "VBD" or any(a.tag_ == "VBD" for a in aux)
         if nominal:
             pass        # gerunds and infinitives are nominalized: no aspect
@@ -217,9 +230,17 @@ class Translator:
                 wh = WH_CASE[c.lower_]
             elif (c.dep_ == "advmod" and c.lower_ not in SKIP_ADV and c.pos_ == "ADV"
                     and not (c.i == c.sent.start and c.lower_.endswith("ly"))) \
-                    or (c.dep_ == "intj" and c.lower_ == "please"):
-                out.append(c.lower_ + ":ADV")
+                    or (c.dep_ == "intj" and c.lower_ == "please") \
+                    or (c.dep_ == "npadvmod" and c.pos_ in ("NOUN", "PROPN", "ADV")):
+                out.append(c.lemma_.lower() + ":ADV")
         subj = next((c for c in kids if c.dep_ in ("nsubj", "nsubjpass", "expl")), None)
+        patient = None
+        if subj is not None and subj.dep_ == "nsubjpass":
+            agent = next((p for c in kids if c.dep_ == "agent"
+                          for p in c.children if p.dep_ == "pobj"), None)
+            if agent is not None:
+                patient, subj = subj, agent
+                self.notes.append("passive normalized to agent–verb–patient order")
         if imperative:
             out.append("2S:PRON@mainsubj")      # the implied addressee raises like any subject
         transitive = any(c.dep_ in ("dobj", "dative", "iobj") for c in kids)
@@ -229,25 +250,31 @@ class Translator:
                 out += self.np(subj, "ABS") + ["CON-"]
             else:
                 case = "ABSV" if embedded and not transitive else None
-                terms = self.np(subj, case, subject=True)
-                if not embedded and len(terms) > 1:
-                    terms = ["NOM-"] + terms
-                elif main and len(terms) == 1:
-                    terms = [terms[0] + "@mainsubj"]
-                out += terms
-        return out + self.predicate(v, embedded, main, wh, own=self.tense_of(v))
+                out += self.np(subj, case, subject=(main and not embedded))
+        return out + self.predicate(v, embedded, main, wh, own=self.tense_of(v), patient=patient)
 
-    def predicate(self, v, embedded=False, main=False, wh=None, own=None):
+    def predicate(self, v, embedded=False, main=False, wh=None, own=None, patient=None, modal=None):
         """Verb, transitivizers, complements, coordinated verbs ('bite …,
         tear out … and chew it' -> bite … AND tear.out … AND chew …), and
         last, since the spine branches right, any embedded clauses."""
         kids = [c for c in v.children if c not in self.skip]
+        for c in kids:
+            if c.dep_ == "cc" and c.lower_ != "and":
+                self.notes.append(f"warning: conjunction {c.text!r} approximated as AND")
         verb = v.lemma_.lower()
         prt = [c for c in kids if c.dep_ == "prt"]
         if prt:
             verb += "." + ".".join(p.lower_ for p in prt)
+        modal = next((MODALS[c.lower_] for c in kids if c.dep_ == "aux" and c.lower_ in MODALS), modal)
+        if modal:
+            verb += ".MOD_" + modal
+        if patient is None and any(c.dep_ == "auxpass" for c in kids):
+            verb += ".PASS"
         out = [verb + ":V" + ("@main" if main else "")]
         trans, comps, conjs, clauses = [], [], [], []
+        if patient is not None:
+            trans.append("-OBJ")
+            comps.append(("obj", patient))
         for c in kids:
             if c.dep_ == "dobj":
                 trans.append("-OBJ")
@@ -258,7 +285,7 @@ class Translator:
             elif c.dep_ in ("attr", "acomp", "oprd"):
                 comps.append(("pred", c))
             elif c.dep_ == "prep" or (c.dep_ == "dative" and c.pos_ == "ADP"):
-                cs = PREP_CASE.get(c.lower_, "LOC")
+                cs = self.case_of(c)
                 for po in c.children:
                     if po.dep_ == "pobj":
                         if cs in TRANSITIVIZED:
@@ -282,6 +309,8 @@ class Translator:
                 clauses.append(c)
             elif c.dep_ == "conj" and c.pos_ in ("VERB", "AUX"):
                 conjs.append(c)
+            elif c.dep_ == "conj":
+                self.notes.append(f"warning: unsupported coordination at {c.text!r}; inspect the gloss")
         if wh:
             # 'how' is 'by what means': INS- WH, with its transitivizer
             if wh in TRANSITIVIZED or wh == "INS":
@@ -302,7 +331,7 @@ class Translator:
                 out.append(cs + "-")
                 out += self.clause(pc, embedded=True)
         for c in conjs:
-            out += ["AND"] + self.predicate(c, embedded, own=own)
+            out += ["AND"] + self.predicate(c, embedded, own=own, modal=modal)
         for c in clauses:
             out += self.clause(c, embedded=True, own_tense=own)
         return out
@@ -315,6 +344,17 @@ class Translator:
         of hell, …'). Each becomes its own utterance with its own START."""
         root = sent.root
         parts = []
+        # Separate clauses with their own subjects need their own START and
+        # movement. Reparse noun-tagged conjuncts too: the small model calls
+        # 'the woman dances' a noun phrase when attached to 'the man sings'.
+        for c in root.conjuncts:
+            if any(k.dep_ in ("nsubj", "nsubjpass") for k in c.children):
+                parts.append(("clause", c))
+            elif c.pos_ not in ("VERB", "AUX"):
+                fragment = " ".join(t.text for t in sorted(c.subtree, key=lambda t: t.i))
+                probe = list(nlp()(fragment).sents)
+                if len(probe) == 1 and any(k.dep_ in ("nsubj", "nsubjpass") for k in probe[0].root.children):
+                    parts.append(("reparsed", c))
         for c in root.children:
             if c.dep_ in ("advcl", "parataxis", "ccomp") and c.i < root.i and self.imperative(c) \
                     and not any(k.dep_ == "mark" for k in c.children):
@@ -339,7 +379,13 @@ class Translator:
             self.skip = set().union(*(t for i, t in subtrees.items() if i != c.i)) - subtrees[c.i]
             text = " ".join(t.text for t in c.subtree if t not in self.skip and not t.is_punct)
             start_i = min(t.i for t in c.subtree if t not in self.skip)
-            if kind == "imperative":
+            if kind == "clause":
+                out.append((start_i, ["AND"] + self.clause(c, main=True), self.tense_of(c) or self.tense_of(root), text))
+            elif kind == "reparsed":
+                clause = next(iter(nlp()(text).sents)).root
+                self.notes.append(f"coordinated clause {text!r} parsed independently")
+                out.append((start_i, ["AND"] + self.clause(clause, main=True), "nonpast", text))
+            elif kind == "imperative":
                 out.append((start_i, self.clause(c, main=True), "nonpast", text))
             else:
                 self.notes.append(f"vocative {text!r} spoken on its own, in VOC-")
@@ -355,7 +401,7 @@ class Translator:
         elif root.pos_ == "INTJ" or root.lower_ in CRIES:
             # 'Oh!': a cry, not a vocative
             out.append((first, ["OH:INTJ" if root.lower_ in CRIES else root.lower_ + ":INTJ"], "nonpast", rest))
-        elif root.pos_ not in ("VERB", "AUX"):
+        elif root.pos_ not in ("VERB", "AUX") and not any(c.dep_ in ("nsubj", "nsubjpass") for c in root.children):
             # 'My sweet…': no verb at all, so a vocative on its own
             self.notes.append("verbless sentence read as a vocative")
             out.append((first, self.np(root, "VOC"), "nonpast", rest))
@@ -413,7 +459,7 @@ class Translator:
         return pieces, tense, stripped
 
 
-def translate(text, lexicon):
+def translate(text, lexicon, strict=False):
     tr = Translator()
     out = []
     sents = list(nlp()(text).sents)
@@ -433,6 +479,9 @@ def translate(text, lexicon):
         tr.skip = set()
         tones = tr.tones(sent, stammer)
         for k, (pieces, tense, label) in enumerate(tr.utterances(sent)):
+            if strict and any(n.startswith("warning:") for n in tr.notes):
+                from .grammar import GrammarError
+                raise GrammarError("; ".join(n for n in tr.notes if n.startswith("warning:")))
             terms = categorize(pieces, lexicon)
             terms = [Term("Ø", "COMP", "c"), Term("Ø", "T", "spec")] + terms
             gloss = " ".join(p.split("@")[0].split(":")[0].split("^")[0] for p in pieces)

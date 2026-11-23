@@ -19,6 +19,8 @@ token: ☀ or * bright, 🔆 or ☀☀ or ** extra bright, ☢ or ! ionized.
 A line `---` separates sentences.
 """
 
+import math
+import json
 import random
 import re
 from dataclasses import dataclass, field
@@ -35,6 +37,30 @@ TENSE_LANG = {
     "pres": "latin", "future": "latin",
     "aramaic": "aramaic", "greek": "greek", "latin": "latin",
 }
+
+# Preserve grammatical distinctions even when two tenses share a prayer language.
+TENSE_CANONICAL = {
+    'fpst': 'farpast', 'gnom': 'gnomic', 'pst': 'nearpast', 'past': 'nearpast',
+    'npres': 'nonpast', 'npst': 'nonpast', 'present': 'nonpast', 'pres': 'nonpast',
+    'future': 'nonpast', 'latin': 'nonpast', 'greek': 'nearpast',
+    # An old language-only label cannot distinguish gnomic from far past.
+    'aramaic': 'aramaic',
+}
+
+
+def tense_names(value):
+    return [TENSE_CANONICAL.get(t.lower(), t.lower()) for t in value.split('+')]
+
+
+def temporal_meaning(tenses):
+    names = list(dict.fromkeys(tenses))
+    if not names:
+        return 'Tense unspecified.'
+    labels = {'farpast': 'far past', 'nearpast': 'near past', 'nonpast': 'non-past',
+              'gnomic': 'timeless / general truth', 'aramaic': 'Aramaic (far past or gnomic unspecified)'}
+    text = ' and '.join(labels.get(t, t) for t in names)
+    return ('Applies jointly in ' if len(names) > 1 else 'Applies in ') + text + (
+        '; stacking alone does not assert continuous duration or uncertainty.' if len(names) > 1 else '.')
 
 BRIGHT, EXTRA, IONIZED = 1, 2, 3
 BRIGHTNESS_NAMES = {0: "-", BRIGHT: "bright", EXTRA: "extra bright", IONIZED: "ionized"}
@@ -76,12 +102,14 @@ class Word:
     sentence_start: bool = False
     tones: dict = field(default_factory=dict)    # tonal markers: {"pain": 0.9, ...}
     stammer: bool = False
+    tenses: list = field(default_factory=list)  # exact effective tense, separate from prayer language
 
 
 @dataclass
 class Score:
     meta: dict
     words: list
+    lexicon: dict = field(default_factory=dict)
 
 
 def _split_marks(tok):
@@ -121,6 +149,100 @@ def parse_tones(spec):
             raise ValueError(f"tone {name} intensity {v} is outside 0..1")
         out[name] = v
     return out
+
+
+def _meta_number(key, value, ln, *, positive=False, unit=False, signed=False):
+    try:
+        x = float(value)
+    except ValueError:
+        raise ScoreError(f"line {ln}: @{key} must be a number, got {value!r}") from None
+    if not math.isfinite(x):
+        raise ScoreError(f"line {ln}: @{key} must be finite, got {value!r}")
+    if positive and x <= 0:
+        raise ScoreError(f"line {ln}: @{key} must be greater than 0")
+    if not positive and not signed and x < 0:
+        raise ScoreError(f"line {ln}: @{key} must not be negative")
+    if unit and not 0 <= x <= 1:
+        raise ScoreError(f"line {ln}: @{key} must be between 0 and 1")
+    return x
+
+
+def validate_meta(key, value, ln):
+    """Reject bad @metadata while parsing, so check and synth agree."""
+    key = key.lower()
+    v = value.strip()
+    if key in ("title", "lexicon_hash"):
+        return
+    if key == "format":
+        if v != "1":
+            raise ScoreError(f"line {ln}: unsupported score format {v!r}")
+    elif key == "lexicon":
+        from .lexicon import validate_entry
+        try:
+            entries = json.loads(v)
+            if not isinstance(entries, dict):
+                raise ValueError("expected an object of glosses")
+            for g, entry in entries.items():
+                if not isinstance(entry, dict) or set(entry) != {"pos", "tokens"}:
+                    raise ValueError(f"invalid entry for {g!r}")
+                validate_entry(g, entry["pos"], entry["tokens"])
+        except (ValueError, TypeError, ScoreError) as e:
+            raise ScoreError(f"line {ln}: @lexicon: {e}") from None
+    elif key == "tense":
+        t = v.lower()
+        if "+" in t:
+            raise ScoreError(f"line {ln}: @tense does not stack; write 'word farpast+nonpast' instead")
+        if t not in TENSE_LANG:
+            known = ", ".join(sorted(TENSE_LANG))
+            raise ScoreError(f"line {ln}: unknown tense {v!r}; known: {known}")
+    elif key == "tempo":
+        _meta_number(key, v, ln, positive=True)
+    elif key == "tone":
+        try:
+            parse_tones(v)
+        except ValueError as e:
+            raise ScoreError(f"line {ln}: @tone: {e}") from None
+    elif key == "reading":
+        if v not in ("matres", "demo"):
+            raise ScoreError(f"line {ln}: unknown reading {v!r}; known: matres, demo")
+    elif key == "begadkefat":
+        if v not in ("soft", "hard"):
+            raise ScoreError(f"line {ln}: unknown begadkefat {v!r}; known: soft, hard")
+    elif key == "dialect":
+        from . import dialects
+        try:
+            dialects.get(v)
+        except ValueError as e:
+            raise ScoreError(f"line {ln}: {e}") from None
+    elif key == "room":
+        from .fx import ROOMS
+        if v not in ROOMS:
+            raise ScoreError(f"line {ln}: unknown room {v!r}; known: {', '.join(ROOMS)}")
+    elif key == "voice":
+        from .render import parse_voice
+        try:
+            parse_voice(v)
+        except ValueError as e:
+            raise ScoreError(f"line {ln}: @voice: {e}") from None
+    elif key == "reverb":
+        _meta_number(key, v, ln)
+    elif key == "reverb_time":
+        _meta_number(key, v, ln)
+    elif key == "reverb_tone":
+        _meta_number(key, v, ln, unit=True)
+    elif key == "predelay":
+        _meta_number(key, v, ln)
+    else:
+        from . import dialects
+        if key in dialects.KNOBS:
+            if key in ("pitch", "gender"):
+                x = _meta_number(key, v, ln, signed=True)
+                if key == "gender" and not -1 <= x <= 1:
+                    raise ScoreError(f"line {ln}: @gender must be between -1 and 1")
+            else:
+                _meta_number(key, v, ln, unit=True)
+        else:
+            raise ScoreError(f"line {ln}: unknown metadata @{key}")
 
 
 def parse_token(raw, begadkefat="soft", rng=None, heresy=False, reading="matres"):
@@ -192,22 +314,25 @@ def parse(text, heresy=False, seed=0, dialect=None):
     words = []
     cur = None
     sentence_start = True
+    seen_mouths = set()
     for ln, line in enumerate(text.splitlines(), 1):
-        line = line.split("#", 1)[0].rstrip()
+        # JSON strings may contain '#'; generated snapshots escape Hebrew
+        # and remain single-line, but user-entered JSON is valid too.
+        line = line.rstrip() if line.lstrip().startswith("@lexicon:") else line.split("#", 1)[0].rstrip()
         if not line.strip():
             continue
         s = line.strip()
         if s.startswith("@"):
+            if words:
+                raise ScoreError(f"line {ln}: score metadata must precede words")
             k, _, v = s[1:].partition(":")
             k = k.strip().lower()
             if k == "dialect" and dialect:
                 continue            # the command line wins
             meta[k] = v.strip()
+            validate_meta(k, meta[k], ln)
             if k == "dialect":
-                try:
-                    heresy = heresy or dialects.get(meta[k]).heresy
-                except ValueError as e:
-                    raise ScoreError(f"line {ln}: {e}") from None
+                heresy = heresy or dialects.get(meta[k]).heresy
             continue
         if s == "---":
             sentence_start = True
@@ -215,10 +340,13 @@ def parse(text, heresy=False, seed=0, dialect=None):
         if s.split()[0].lower() == "word":
             args = s.split()[1:]
             langs = None
+            tenses = None
             tones, stammer = {}, False
             if args and not args[0].startswith("tone=") and args[0] != "stammer":
                 langs = []
-                for t in args.pop(0).lower().split("+"):
+                tense_spec = args.pop(0).lower()
+                tenses = tense_names(tense_spec)
+                for t in tense_spec.split("+"):
                     if t not in TENSE_LANG:
                         raise ScoreError(f"line {ln}: unknown tense {t!r}")
                     langs.append(TENSE_LANG[t])
@@ -234,12 +362,15 @@ def parse(text, heresy=False, seed=0, dialect=None):
                     raise ScoreError(f"line {ln}: unknown word option {a!r} (expected tone=… or stammer)")
             if langs is None:
                 if words:
+                    tenses = list(words[-1].tenses)
                     langs = list(words[-1].langs)   # tense carries over from the previous word
                 else:
+                    tenses = tense_names(meta["tense"])
                     langs = [TENSE_LANG[meta["tense"].lower()]]
-            cur = Word(langs, {m: MouthLine() for m in MOUTHS}, ln, sentence_start, tones, stammer)
+            cur = Word(langs, {m: MouthLine() for m in MOUTHS}, ln, sentence_start, tones, stammer, tenses)
             sentence_start = False
             words.append(cur)
+            seen_mouths = set()
             continue
         label, sep, body = s.partition(":")
         if not sep or label.strip().lower() not in MOUTH_ALIASES:
@@ -247,6 +378,9 @@ def parse(text, heresy=False, seed=0, dialect=None):
         if cur is None:
             raise ScoreError(f"line {ln}: mouth line before any 'word'")
         mouth = MOUTH_ALIASES[label.strip().lower()]
+        if mouth in seen_mouths:
+            raise ScoreError(f"line {ln}: duplicate mouth {mouth!r}")
+        seen_mouths.add(mouth)
         body = body.strip()
         ml = MouthLine()
         if body.startswith("~"):
@@ -266,7 +400,21 @@ def parse(text, heresy=False, seed=0, dialect=None):
         cur.mouths[mouth] = ml
     if not words:
         raise ScoreError("score has no words")
-    return Score(meta, words)
+    entries = json.loads(meta.get("lexicon", "{}"))
+    score = Score(meta, words, entries)
+    if entries or "lexicon_hash" in meta:
+        from .lexicon import score_lexicon, snapshot_hash
+        if "lexicon_hash" in meta and meta["lexicon_hash"] != snapshot_hash(entries):
+            raise ScoreError("embedded lexicon hash mismatch")
+        score_lexicon(score)
+    return score
+
+
+def diagnostics(score):
+    """Machine-readable phonological violations; informational notes omitted."""
+    return [dict(word=i, line=w.line, mouth=m, token=t.text, message=n)
+            for i, w in enumerate(score.words, 1) for m, ml in w.mouths.items()
+            for t in ml.tokens for n in t.notes if not n.startswith("·")]
 
 
 def report(score):

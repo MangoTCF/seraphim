@@ -4,7 +4,7 @@ Segments go in, a mono float signal comes out, along with the sample span of
 every tagged segment so effects (brightness, 4D movement) can find them.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 
 import numpy as np
@@ -38,6 +38,10 @@ class Voice:
     roar: float = 0.0       # turbulent false-fold noise in the source
     throat: float = 0.0     # pharyngeal constriction
     voicing: float = 1.0    # 0 = a pure whisper
+    syllable_blend: float = 0.0  # connected-speech blending; 0 is an exact bypass
+    transitions: float = 1.0   # smooth parameter motion; 0 restores linear ramps
+    coarticulation: float = 0.45  # neighbouring vowels shape consonant releases
+    articulation: float = 1.0   # burst/frication strength, independent of pitch
     open: float = 0.0       # jaw opening (screaming): F1 up, F2 a little up
 
 
@@ -48,6 +52,7 @@ class Seg:
     f0: tuple = None        # (start Hz, end Hz); None = caller's default
     tag: object = None
     amp: float = 1.0
+    join_from: str = None    # internal word bridge; never parsed from a score
 
 
 @dataclass
@@ -60,18 +65,30 @@ def _expand(segs):
     """Split stops into closure + burst (+ aspiration) sub-segments."""
     out = []
     for i, s in enumerate(segs):
+        if s.phone == '_join' and PHONES.get(s.join_from, {}).get('kind') in (FRIC, ASP):
+            s = replace(s, phone=s.join_from)
         p = PHONES.get(s.phone)
         if p is None:
             out.append(("sil", s, s.dur, s.f0))
             continue
         if p["kind"] == STOP:
-            burst = 0.012
-            closure = max(s.dur - burst, 0.02)
-            out.append(("closure", s, closure, s.f0))
-            out.append(("burst", s, burst, s.f0))
+            # All components share the planned duration. Adding aspiration
+            # here used to make lines and choir chunks overrun their slots.
             nxt = segs[i + 1].phone if i + 1 < len(segs) else None
-            if not p["voiced"] and nxt in PHONES and PHONES[nxt]["kind"] in (V, APPROX, NAS, TRILL):
-                out.append(("asp", s, 0.022, s.f0))
+            aspirated = not p["voiced"] and nxt in PHONES and PHONES[nxt]["kind"] in (V, APPROX, NAS, TRILL)
+            burst = min(0.012, s.dur * 0.2)
+            aspiration = min(0.022, s.dur * 0.3) if aspirated else 0.0
+            closure = s.dur - burst - aspiration
+            offset = 0.0
+            for part, duration in [('closure', closure), ('burst', burst), ('asp', aspiration)]:
+                if duration <= 0:
+                    continue
+                f0 = s.f0
+                if f0 and s.dur > 0:
+                    a, b = f0
+                    f0 = (a + (b-a) * offset / s.dur, a + (b-a) * (offset + duration) / s.dur)
+                out.append((part, s, duration, f0))
+                offset += duration
         else:
             out.append(("main", s, s.dur, s.f0))
     return out
@@ -122,6 +139,44 @@ def _targets(part, seg, voice):
     return dict(f=f, bw=bw, av=av, ah=ah, creak=creak, trill=trill)
 
 
+def contextual_targets(parts, targets, amount):
+    """Shape consonant loci from adjacent vowels without crossing a pause.
+
+    Targets are private copies. Anticipatory context is strongest at releases;
+    closures retain their low F1 and every segment keeps its allocated duration.
+    """
+    from copy import deepcopy
+    out = deepcopy(targets)
+    amount = float(np.clip(amount, 0, 1))
+    for i, (part, seg, _, _) in enumerate(parts):
+        phone = PHONES.get(seg.phone)
+        if not phone or phone['kind'] not in (STOP, NAS, APPROX, FRIC):
+            continue
+        context = []
+        for direction in (-1, 1):
+            for j in range(i + direction, len(parts) if direction > 0 else -1, direction):
+                other = parts[j][1]
+                p = PHONES.get(other.phone)
+                if not p:
+                    break  # a word/morpheme pause blocks anticipation
+                if other is seg:
+                    continue  # closure/burst/aspiration of this same stop
+                if p['kind'] == V:
+                    context.append((direction, targets[j]['f']))
+                break
+        if not context or out[i]['f'] is None:
+            continue
+        # A following vowel pulls releases forward; nasals/liquids use both sides.
+        following = next((f for d, f in context if d == 1), None)
+        vowel = following or context[0][1]
+        strength = amount * (.55 if part in ('burst', 'asp') else .22)
+        for k in (1, 2):
+            out[i]['f'][k] += strength * (vowel[k] - out[i]['f'][k])
+        if part != 'closure' and seg.phone not in ('tˤ', 'sˤ', 'q'):
+            out[i]['f'][0] += amount * .12 * (vowel[0] - out[i]['f'][0])
+    return out
+
+
 @lru_cache(maxsize=1024)
 def _sos(order, cutoff, btype, sr):
     return butter(order, cutoff, btype, fs=sr, output="sos")
@@ -143,13 +198,19 @@ def _cascade_py(src, F, Bw, hop, sr):
     y = src
     for k in range(F.shape[0]):
         out = np.empty(n)
-        zi = np.zeros(2)
+        y1 = y2 = 0.0
         for fr in range(F.shape[1]):
             a0, b0 = fr * hop, min((fr + 1) * hop, n)
             if a0 >= n:
                 break
             A, Bc, C = _resonator_coeffs(F[k, fr], Bw[k, fr], sr)
+            # lfilter's state contains coefficients, not previous samples.
+            # Rebuild it when parameters change to match the compiled path.
+            zi = np.array([Bc * y1 + C * y2, C * y1])
             out[a0:b0], zi = lfilter([A], [1, -Bc, -C], y[a0:b0], zi=zi)
+            chunk = out[a0:b0]
+            y2 = chunk[-2] if len(chunk) > 1 else y1
+            y1 = chunk[-1]
         y = out
     return y
 
@@ -214,6 +275,24 @@ def _smooth_noise(n, rate, sr, rng):
     return np.interp(np.linspace(0, k - 1, n), np.arange(k), pts)
 
 
+def interpolate_track(times, values, query, smoothness=1.0):
+    """Monotone smoothstep between targets; no overshoot or timing change.
+
+    Duplicate timestamps use the last target, matching numpy.interp. Blending
+    with the old linear ramp makes the transition control suitable for A/B.
+    """
+    times, values = np.asarray(times, dtype=float), np.asarray(values, dtype=float)
+    keep = np.r_[np.diff(times) > 0, True]
+    times, values = times[keep], values[keep]
+    if len(times) == 1:
+        return np.full_like(query, values[0], dtype=float)
+    left = np.clip(np.searchsorted(times, query, side='right') - 1, 0, len(times) - 2)
+    u = np.clip((query - times[left]) / (times[left + 1] - times[left]), 0, 1)
+    eased = u * u * (3 - 2 * u)
+    u += float(np.clip(smoothness, 0, 1)) * (eased - u)
+    return values[left] + u * (values[left + 1] - values[left])
+
+
 def render(segs, voice, rng=None, sr=SR, default_f0=None):
     rng = rng or np.random.default_rng(0)
     parts = _expand(segs)
@@ -235,15 +314,37 @@ def render(segs, voice, rng=None, sr=SR, default_f0=None):
                 nb = next((tg[j]["f"] for j in range(i - 1, -1, -1) if tg[j]["f"] is not None), None)
             t["f"] = list(nb) if nb is not None else [500, 1450, 2500, 3500, 4500]
 
+    # Joined phrases retain one excitation phase across the word grid. Generated
+    # _join slots carry the preceding voiced tract; real silences stay silent.
+    for i, (_, seg, _, _) in enumerate(parts):
+        if seg.phone == '_join' and i > 0:
+            for key in ('f','bw','av','ah','creak','trill'):
+                tg[i][key] = list(tg[i-1][key]) if isinstance(tg[i-1][key], list) else tg[i-1][key]
+            tg[i]['av'] *= seg.amp
+            tg[i]['ah'] *= seg.amp
+    tg = contextual_targets(parts, tg, voice.coarticulation)
+
+    continuants = (V, APPROX, NAS, TRILL, FRIC, ASP)
+    joined = [
+        voice.syllable_blend
+        if (left[0] == right[0] == "main"
+            and all(PHONES.get(p[1].phone, {}).get("kind") in continuants for p in (left, right)))
+        else 0.0
+        for left, right in zip(parts, parts[1:])
+    ]
+    joined = [0.0, *joined, 0.0]
+
     def track(key, trans, idx=None):
         xs, ys = [], []
         for i, t in enumerate(tg):
             v = t[key] if idx is None else t[key][idx]
             s0, d = starts[i], durs[i]
-            h = min(trans, d / 2)
-            xs += [s0 + h, s0 + d - h]
+            extension = 0.020 if key in ("av", "ah") else 0.0
+            attack = min(trans + extension * joined[i], d / 2)
+            release = min(trans + extension * joined[i + 1], d / 2)
+            xs += [s0 + attack, s0 + d - release]
             ys += [v, v]
-        return np.interp(tf, xs, ys)
+        return interpolate_track(xs, ys, tf, voice.transitions)
 
     F = np.stack([track("f", 0.035, k) for k in range(5)]) * voice.fscale
     if voice.open:
@@ -260,6 +361,13 @@ def render(segs, voice, rng=None, sr=SR, default_f0=None):
     AH = track("ah", 0.01)
     CR = track("creak", 0.02)
     TR = track("trill", 0.01)
+    if voice.syllable_blend:
+        from .legato import blend_features
+        # Reuse the narrow, join-local gain repair without altering formants.
+        _, _, _, AV = blend_features(np.ones((len(tf),1)), np.zeros((len(tf),1)),
+                                     np.ones(len(tf)), AV, tf, [p[1] for p in parts],
+                                     np.r_[starts,total], voice.syllable_blend)
+
 
     # ---- source ----
     ts = np.arange(n) / sr
@@ -270,7 +378,7 @@ def render(segs, voice, rng=None, sr=SR, default_f0=None):
         f0_seg.append((s0, a, s0 + d, b))
     fx = np.array([[s, a] for s, a, _, _ in f0_seg] + [[e, b] for _, _, e, b in f0_seg])
     order = np.argsort(fx[:, 0], kind="stable")
-    f0 = np.interp(ts, fx[order, 0], fx[order, 1])
+    f0 = interpolate_track(fx[order, 0], fx[order, 1], ts, voice.transitions)
     cr = np.interp(ts, tf, CR)
     if voice.fry:
         # Vocal fry everywhere, and worst where the voice is weak (onsets,
@@ -335,7 +443,7 @@ def render(segs, voice, rng=None, sr=SR, default_f0=None):
 
     # ---- frication and bursts, parallel noise bands ----
     fric = np.zeros(n)
-    for (part, seg, d, _), s0 in zip(parts, starts):
+    for pi, ((part, seg, d, _), s0) in enumerate(zip(parts, starts)):
         p = PHONES.get(seg.phone)
         if p is None:
             continue
@@ -357,15 +465,21 @@ def render(segs, voice, rng=None, sr=SR, default_f0=None):
             sos = design(2, [lo, hi], "bandpass", sr)
             seg_noise += g * sosfilt(sos, rng.standard_normal(m))
         if part == "burst":
-            env = np.exp(-np.arange(m) / (0.004 * sr))
+            # A sub-millisecond attack removes the artificial impulse at a
+            # release while retaining the short, crisp consonant burst.
+            env = (1 - np.exp(-np.arange(m) / (0.0005 * sr))) * np.exp(-np.arange(m) / (0.004 * sr))
         else:
             # Soft, rounded onsets and offsets: hard ramps hissed like a valve.
             r = min(int(0.035 * sr), m // 2)
             env = np.ones(m)
             ramp = 0.5 - 0.5 * np.cos(np.linspace(0, np.pi, r))
-            env[:r] = ramp
-            env[m - r:] = ramp[::-1]
-        fric[a0:a0 + m] += seg_noise * env * seg.amp
+            continuing_left = pi > 0 and parts[pi-1][1].phone == seg.phone and (seg.join_from is not None or parts[pi-1][1].join_from is not None)
+            continuing_right = pi+1 < len(parts) and parts[pi+1][1].phone == seg.phone and (seg.join_from is not None or parts[pi+1][1].join_from is not None)
+            if not continuing_left:
+                env[:r] = ramp
+            if not continuing_right:
+                env[m - r:] = ramp[::-1]
+        fric[a0:a0 + m] += seg_noise * env * seg.amp * voice.articulation
 
     # Calibrate: voiced vowels near 0.1 RMS, frication relative to that.
     vowel = av > 0.9

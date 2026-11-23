@@ -1,7 +1,8 @@
 """Turn a parsed score into a 7-voice binaural recording."""
 
 import random
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from typing import NamedTuple
 
 import numpy as np
 
@@ -29,12 +30,20 @@ def _lerp(a, b, t):
     return a + (b - a) * t
 
 
+# Stable articulatory identities: not random per render or just pitch offsets.
+MOUTH_CHARACTER = {
+    'top': dict(jitter=.004, tilt=3800, coarticulation=.3, articulation=1.12),
+    '1': dict(jitter=.005, tilt=3500, coarticulation=.4, articulation=1.06),
+    '2': dict(jitter=.008, tilt=3000, coarticulation=.6, articulation=.92),
+    'end': dict(jitter=.006, tilt=2700, coarticulation=.5, articulation=.86),
+}
+
 def mouth_voice(m, gender=0.0):
     """The voice of mouth m with gender in [-1 masculine, +1 feminine]."""
     t = (min(max(gender, -1), 1) + 1) / 2
     (f_m, s_m), (f_f, s_f) = MOUTH_RANGE[m]
     return Voice(m, f_m ** (1 - t) * f_f ** t, fscale=_lerp(s_m, s_f, t),
-                 oq=_lerp(*QUALITY["oq"], t), breath=_lerp(*QUALITY["breath"], t))
+                 oq=_lerp(*QUALITY["oq"], t), breath=_lerp(*QUALITY["breath"], t), **MOUTH_CHARACTER[m])
 
 
 def choir_voice(vi, gender=0.0):
@@ -70,6 +79,10 @@ TAIL = 3.0
 @dataclass
 class Options:
     choir: bool = True
+    prayer_time: bool = True  # melodic tense signatures, aligned even in backmasked choirs
+    syllable_blend: float = 0.5  # 0 discrete syllables .. 1 strongly connected
+    mouth_blend: dict = None    # independent mouth/prayer overrides; missing means inherit
+    transitions: float = 1.0  # 0 linear ramps .. 1 smooth articulatory motion
     space: bool = True
     choir_level: float = 0.42
     reverb_mix: float = 0.28  # mouths' send into the room (the choir sends 1.4)
@@ -83,16 +96,64 @@ class Options:
     seed: int = 0
     glitter: float = 1.0      # extra-bright glitter level, 0 = off
     hum: float = 0.3          # closed and null mouths hum [m] at this level, 0 = silent
+    prayer_tail: float = 2.4  # seconds of sustained prayer after the last phrase
+    prayer_rise: float = 7.0  # semitones over the sustained prayer
+    sample_banks: dict = None  # bank IDs by mouth, praise-1/2/3, choir or all
+    sample_approximation: bool = True  # permit documented nearest-phoneme mappings
     voice: dict = None        # gender per mouth / 'choir', -1 masculine .. +1 feminine
     dialect: str = None       # overrides the score's @dialect
     knobs: dict = None        # dialect knob overrides, e.g. {'growl': 0.9}
     tones: dict = None        # tonal markers applied to every word, e.g. {'pain': 0.8}
+    master: bool = True        # normalize and gently saturate the final mix
+    keep_stems: bool = True    # disable when only the stereo mix is needed
+
+
+class WordPlan(NamedTuple):
+    word: object
+    start: float
+    lines: dict
+    duration: float
+
+
+@dataclass
+class RenderPlan:
+    options: Options
+    tempo: float
+    dialect: object
+    knobs: dict
+    gender: dict
+    roles: dict
+    voices: dict
+    mouth_tones: dict
+    tones: list
+    words: list
+    sentences: list
+    hums: dict
+    flags: dict
+    total: float
+    room: object
+    reverb_amount: float
+    sample_report: dict = field(default_factory=dict)
+    vowel_brightness: dict = field(default_factory=dict)
+
+    def summary(self):
+        from dataclasses import asdict
+        from .legato import amount, CHANNELS
+        return dict(syllable_blend={c: amount(self.options, c) for c in CHANNELS}, options=asdict(self.options), sample_banks=self.sample_report, tempo=self.tempo,
+                    dialect=asdict(self.dialect), voice=self.gender, seconds=self.total,
+                    room=asdict(self.room), reverb=self.reverb_amount,
+                    words=[dict(index=i + 1, start=w.start, duration=w.duration, tenses=w.word.tenses,
+                                sentence_start=w.word.sentence_start,
+                                mouths={m: dict(dialect=self.roles[(i, m)].name,
+                                                tones=self.mouth_tones[(i, m)],
+                                                seconds=sum(s.dur for s in w.lines.get(m, [])))
+                                        for m in MOUTHS}) for i, w in enumerate(self.words)])
 
 
 STOPLIKE = {"stop", "glottal"}
 
 
-def line_segments(ml, tempo, rng=None, moan=0.0, final=False):
+def line_segments(ml, tempo, rng=None, moan=0.0, final=False, formant_blend=0.0):
     """Segments for one mouth line, as connected speech: no pauses between
     tokens (only at morpheme breaks), each token its own loudness, durations
     a little uneven, the last token softer. The last word of a sentence
@@ -103,6 +164,17 @@ def line_segments(ml, tempo, rng=None, moan=0.0, final=False):
     phon = [i for i, t in enumerate(ml.tokens) if t.kind == "phoneme"]
     for i, t in enumerate(ml.tokens):
         if t.kind == "break":
+            if (formant_blend and t.text in ("-", "–") and segs
+                    and i + 1 < len(ml.tokens) and ml.tokens[i + 1].kind == "phoneme"):
+                previous = segs[-1].phone
+                kind = PHONES.get(previous, {}).get("kind")
+                gap = BREAK_GAP / tempo * (1 - formant_blend)
+                if gap > 0:
+                    if kind in ("vowel", "nasal", "approx", "trill", "fric", "aspirate"):
+                        segs.append(Seg("_join", gap, join_from=previous))
+                    else:
+                        segs.append(Seg("sil", gap))
+                continue
             segs.append(Seg("sil", BREAK_GAP / tempo))
             continue
         last = phon and i == phon[-1]
@@ -272,7 +344,8 @@ def stammer(segs, rng, fear=0.5):
 def tone_pitch(segs, tones, rng, base=None, final=False):
     """Pitch under strain. Pain pushes the voice up and makes each vowel wail
     downward, with sudden upward cracks where the voice breaks; a scream
-    goes higher still and arcs; fear raises it a little; a whimper sinks."""
+    goes higher still and arcs; fear raises it a little; a whimper catches
+    and sinks."""
     if not tones:
         return segs
     pain, scream, anger, fear, whimper = (tones.get(k, 0) for k in ("pain", "scream", "anger", "fear", "whimper"))
@@ -287,7 +360,7 @@ def tone_pitch(segs, tones, rng, base=None, final=False):
             continue
         a, b = x.f0[0] * lift, x.f0[1] * lift
         if PHONES.get(x.phone, {}).get("kind") == "vowel":
-            b *= 2 ** (-(3 * pain + 2 * whimper) / 12)              # the wail falls away
+            b *= 2 ** (-(3 * pain + 4 * whimper) / 12)
             if scream:
                 mid = (a + b) / 2 * 2 ** (scream * rng.uniform(1, 3) / 12)
                 out += [Seg(x.phone, x.dur * 0.45, (a, mid), x.tag, x.amp),
@@ -304,7 +377,22 @@ def tone_pitch(segs, tones, rng, base=None, final=False):
                         Seg(x.phone, c, (mid * up, mid * up), x.tag, x.amp * 1.1),
                         Seg(x.phone, x.dur - pre - c, (mid, b), x.tag, x.amp)]
                 continue
-        out.append(Seg(x.phone, x.dur, (a, b), x.tag, x.amp))
+            if whimper and x.dur >= .085:
+                # A brief loss of voicing under the upward catch, followed by
+                # a weaker vowel release. Keep the spoken rhythm and tags.
+                catch_at = rng.uniform(.23, .36)
+                release_at = catch_at + .18
+                peak = a * 2 ** (whimper * rng.uniform(3, 5) / 12)
+                release = peak + (b - peak) * .55
+                out.extend((
+                    replace(x, dur=x.dur * catch_at, f0=(a, peak)),
+                    replace(x, dur=x.dur * (release_at - catch_at), f0=(peak, release),
+                            amp=x.amp * (1 - .65 * whimper)),
+                    replace(x, dur=x.dur * (1 - release_at), f0=(release, b),
+                            amp=x.amp * (1 - .4 * whimper)),
+                ))
+                continue
+        out.append(replace(x, f0=(a, b)))
     return out
 
 
@@ -356,12 +444,13 @@ def tone_voice(v, tones):
     return replace(v,
                    oq=max(v.oq - 0.12 * pain - 0.15 * scream - 0.1 * anger + 0.1 * whimper + 0.05 * smug, 0.35),
                    fry=max(v.fry, 0.3 * smug),                           # the dismissive creak
-                   jitter=v.jitter * (1 + 4 * pain + 3 * scream + 2 * fear),
+                   jitter=v.jitter * (1 + 4 * pain + 3 * scream + 2 * fear + 2 * whimper),
                    roar=min(1.0, v.roar + 0.35 * pain + 0.6 * scream + 0.15 * anger),
-                   breath=v.breath + 0.15 * pain + 0.3 * whimper + 0.15 * fear + 0.1 * smug,
+                   breath=v.breath + 0.15 * pain + 0.45 * whimper + 0.15 * fear + 0.1 * smug,
                    voicing=v.voicing * (1 - 0.3 * whimper),
                    open=max(v.open, scream, 0.3 * pain),
-                   vibrato=max(v.vibrato, 0.035 * fear), vib_rate=7.5 if fear else v.vib_rate)
+                   vibrato=max(v.vibrato, 0.035 * fear, 0.065 * whimper),
+                   vib_rate=7.5 if fear else 5.5 if whimper else v.vib_rate)
 
 
 BREAKS = {"break", "crack", "snap", "shatter", "tear", "rip", "split"}
@@ -372,9 +461,9 @@ def pain_sounds(score, plans, tones, opts, n):
     """At the ears: a crack inside the wing on breaking words, a rustle of
     feathers on wing words, a sobbing breath in before painful words."""
     import re
-    from .lexicon import Lexicon
+    from .lexicon import score_lexicon
     from .reading import decode_line
-    lx = Lexicon(save=False)
+    lx = score_lexicon(score)
     index = lx.by_signature()
     events = []
     rng = _rng(opts.seed, 11)
@@ -440,13 +529,16 @@ def hum_glide(segs, moan, rng):
     return segs
 
 
-def edges(sig, fade=EDGE_FADE):
+def edges(sig, fade=EDGE_FADE, *, left=None, right=None):
     """Soft edges so consecutive words join without clicks."""
-    r = min(int(fade * SR), len(sig) // 2)
-    if r:
-        ramp = 0.5 - 0.5 * np.cos(np.linspace(0, np.pi, r))
-        sig[:r] *= ramp
-        sig[-r:] *= ramp[::-1]
+    for side, duration in [('left', fade if left is None else left), ('right', fade if right is None else right)]:
+        r = min(int(duration * SR), len(sig) // 2)
+        if r:
+            ramp = .5 - .5 * np.cos(np.linspace(0, np.pi, r))
+            if side == 'left':
+                sig[:r] *= ramp
+            else:
+                sig[-r:] *= ramp[::-1]
     return sig
 
 
@@ -470,6 +562,8 @@ def parse_voice(spec):
         v = named.get(val.lower()) if val.lower() in named else float(val)
         if not -1 <= v <= 1:
             raise ValueError(f"voice {v} is outside -1 (masculine) .. +1 (feminine)")
+        if key and key not in (*MOUTHS, "all", "choir"):
+            raise ValueError(f"unknown voice key {key!r}; expected top, 1, 2, end, choir or all")
         out[key or "all"] = v
     return out
 
@@ -486,9 +580,9 @@ def hungry_tender(score, plans):
     them through the lexicon (by phoneme value, so respelling doesn't matter).
     Returns {(word, mouth): (kind, glosses)}."""
     import re
-    from .lexicon import Lexicon
+    from .lexicon import score_lexicon
     from .reading import decode_line
-    lx = Lexicon(save=False)
+    lx = score_lexicon(score)
     index = lx.by_signature()
     out = {}
     for wi, (w, *_rest) in enumerate(plans):
@@ -587,7 +681,35 @@ def _rng(seed, *key):
     return np.random.default_rng([seed & 0xFFFFFFFF, *key])
 
 
-def _line_job(job):
+def render_voice(segs, voice, rng, opts, channel, default_f0=None):
+    from .samplebank import selected
+    from .legato import amount
+    voice = replace(voice, syllable_blend=amount(opts, channel))
+    bank = selected(opts.sample_banks, channel)
+    if bank:
+        from .samplebank import render as sample_render
+        return sample_render(segs, voice, rng, bank, opts.sample_approximation, default_f0)
+    return render(segs, voice, rng, default_f0=default_f0)
+
+
+def _bank_coverage(segs, opts, channel):
+    from .samplebank import coverage, selected
+    bank = selected(opts.sample_banks, channel)
+    return coverage(bank, [s.phone for s in segs], opts.sample_approximation) if bank else None
+
+
+def _record_bank(plan, channel, report):
+    if not report:
+        return
+    entry = plan.sample_report.setdefault(channel, dict(bank=report['bank'], name=report['name'], counts={}, mapping={}))
+    entry['mapping'].update(report['mapping'])
+    for kind, phones in report['counts'].items():
+        counts = entry['counts'].setdefault(kind, {})
+        for phone, count in phones.items():
+            counts[phone] = counts.get(phone, 0) + count
+
+
+def _line_job(job, prepared=None, join_left=0, join_right=0):
     """Render one mouth's line for one word: voice, growl layer, whisper,
     brightness, damage, 4D movement. Segments arrive with their pitch
     already planned (see the prosody pass). Returns the pieces to place."""
@@ -596,8 +718,10 @@ def _line_job(job):
     if surge:
         # Hungry words: the growl and roar surge for this line.
         voice = replace(voice, growl=min(1.0, voice.growl + surge), roar=min(1.0, voice.roar + 0.4 * surge))
-    r = render(segs, voice, rng)
-    out = {"m": m, "start": start, "main": None, "moved": None, "whisper": None}
+    r = prepared if prepared is not None else render_voice(segs, voice, rng, opts, m)
+    if prepared is None:
+        r.audio = fx.deess(r.audio)
+    out = {"m": m, "start": start, "main": None, "moved": None, "whisper": None, "bank_coverage": _bank_coverage(segs, opts, m)}
     if voice.growl:
         # The growl's body: a second, rougher throat an octave down, kept
         # under the voice (less so toward feminine). Heavy jitter keeps it
@@ -605,27 +729,33 @@ def _line_job(job):
         # beating pulses like a croak.
         sub_v = replace(voice, growl=0.0, fry=0.0, roar=min(1.0, voice.roar + 0.3), jitter=0.03,
                         fscale=voice.fscale * 0.9, breath=voice.breath + 0.1)
-        sub = render([Seg(x.phone, x.dur, (x.f0[0] / 2, x.f0[1] / 2) if x.f0 else None, x.tag, x.amp)
-                      for x in segs], sub_v, rng).audio
+        sub = render_voice([Seg(x.phone, x.dur, (x.f0[0] / 2, x.f0[1] / 2) if x.f0 else None, x.tag, x.amp)
+                      for x in segs], sub_v, rng, opts, m).audio
         sub = fx.sosfilt(fx.sos_lowpass(1600), sub)
         k = min(len(sub), len(r.audio))
         r.audio[:k] += 0.5 * voice.growl * (1 - 0.6 * fem) * sub[:k]
     if dia.whisper:
         # A whispered double, breathed right at the listener's ears.
         wv = replace(voice, voicing=0.0, breath=1.0, growl=0.0, roar=0.0, fry=0.0)
-        whisp = render(segs, wv, rng).audio
+        whisp = render_voice(segs, wv, rng, opts, m).audio
         whisp *= dia.whisper * 0.8 * (np.sqrt(np.mean(r.audio ** 2)) / (np.sqrt(np.mean(whisp ** 2)) + 1e-9))
         out["whisper"] = edges(whisp)
     octave = None
     if EXTRA in levels.values():
         up = [Seg(x.phone, x.dur, (x.f0[0] * 2, x.f0[1] * 2), x.tag) for x in segs]
-        octave = render(up, voice, rng).audio
+        octave = render_voice(up, voice, rng, opts, m).audio
     sig = fx.brighten(r.audio, r.spans, levels, octave, rng, glitter=opts.glitter)
     if dia.damaged:
         sig = fx.wound(sig, rng, **wound)
-    sig = edges(sig) * gain
+    sig = edges(sig, left=EDGE_FADE*(1-join_left), right=EDGE_FADE*(1-join_right)) * gain
     if out["whisper"] is not None:
         out["whisper"] = out["whisper"] * gain
+    vowel_tags = {seg.tag for seg in segs if PHONES.get(seg.phone, {}).get("kind") == "vowel"}
+    brightness = [(a, min(b, len(sig)), levels[tag]) for tag, a, b in r.spans
+                  if tag in vowel_tags and tag in levels and a < min(b, len(sig))]
+    if moved and opts.reverse_4d:
+        brightness = [(len(sig) - b, len(sig) - a, level) for a, b, level in brightness]
+    out["vowel_brightness"] = brightness
     if moved:
         # The mouth stays shut; the morpheme materialises in front of it,
         # its echo arriving from the future before the sound does.
@@ -640,20 +770,117 @@ def _line_job(job):
     return out
 
 
+def _speech_groups(jobs, plans):
+    """Keep connected words in one excitation stream, with bounded job memory."""
+    from .legato import amount
+    by_mouth = {m: [] for m in MOUTHS}
+    for job in jobs:
+        by_mouth[job[2]].append(job)
+    groups = []
+    for mouth_jobs in by_mouth.values():
+        current = []
+        for job in mouth_jobs:
+            compatible = False
+            if current and amount(job[8], job[2]) > 0:
+                previous = current[-1]
+                gap = job[11] - previous[11] - sum(s.dur for s in previous[3])
+                compatible = (job[0] == previous[0]+1 and not plans[job[0]].word.sentence_start
+                              and not job[10] and not previous[10] and not job[12] and not previous[12]
+                              and job[4] == previous[4] and job[5:8] == previous[5:8]
+                              and job[13] == previous[13] and -.00001 <= gap <= .06
+                              and job[11] + sum(s.dur for s in job[3]) - current[0][11] <= 12)
+            if current and not compatible:
+                groups.append(current); current = []
+            current.append(job)
+        if current:
+            groups.append(current)
+    return groups
+
+
+def _speech_job(group, hum=False):
+    """Render phrase-continuous source once, then retain word-specific effects."""
+    finish_line = _hum_line if hum else _line_job
+    if len(group) == 1:
+        return [finish_line(group[0])]
+    from .legato import amount
+    from .synth import Rendered
+    first = group[0]
+    opts, mouth, voice = first[8], first[2], first[4]
+    strength = amount(opts, mouth)
+    merged, offsets, connections = [], [], []
+    origin = first[11]
+    origin_frame = int(round(origin * SR))
+    sustain = {'vowel', 'nasal', 'approx', 'trill', 'fric', 'aspirate'}
+    for index, job in enumerate(group):
+        if index:
+            previous = group[index-1]
+            gap = max(0, job[11] - previous[11] - sum(s.dur for s in previous[3]))
+            last = previous[3][-1]
+            connected = (gap > 1e-6 and PHONES.get(last.phone, {}).get('kind') in sustain
+                         and job[3][0].phone in PHONES)
+            connections.append(connected)
+            if gap > 1e-9:
+                start_pitch = last.f0[1] if last.f0 else voice.f0
+                end_pitch = job[3][0].f0[0] if job[3][0].f0 else start_pitch
+                merged.append(Seg('_join' if connected else 'sil', gap,
+                                  (start_pitch, end_pitch), amp=1.0, join_from=last.phone if connected else None))
+        offsets.append(job[11] - origin)
+        merged.extend(replace(s, tag=(index, s.tag) if s.tag is not None else None) for s in job[3])
+    rng = _rng(opts.seed, 1, first[0], first[1])
+    raw = render_voice(merged, voice, rng, opts, mouth)
+    if not hum:
+        raw.audio = fx.deess(raw.audio)
+    results = []
+    for index, job in enumerate(group):
+        begin = int(offsets[index] * SR)
+        length = int(sum(s.dur for s in job[3]) * SR)
+        spans = [(tag[1], max(0,a-begin), min(length,b-begin)) for tag,a,b in raw.spans
+                 if tag[0] == index and b > begin and a < begin+length]
+        prepared = Rendered(np.pad(raw.audio[begin:begin+length].copy(),
+                                  (0,max(0,begin+length-len(raw.audio)))), spans)
+        piece = finish_line(job, prepared, 1 if index and connections[index-1] else 0,
+                          1 if index < len(connections) and connections[index] else 0)
+        piece['start'] = (origin_frame + begin) / SR
+        results.append(piece)
+        if index < len(connections) and connections[index]:
+            finish = int(offsets[index+1] * SR)
+            bridge = raw.audio[begin+length:finish].copy() * job[13]
+            if job[7].damaged:
+                bridge = fx.wound(bridge, _rng(opts.seed,16,job[0],job[1]), **job[6])
+            results.append(dict(m=mouth,start=(origin_frame+begin+length)/SR,main=bridge,moved=None,whisper=None))
+    return results
+
+
+def _hum_line(job, prepared=None, join_left=0, join_right=0):
+    wi,mi,m,segs,voice,_,wound,dia,opts,_,_,start,_,gain = job
+    rng = _rng(opts.seed, 2, wi, mi)
+    audio = prepared.audio if prepared is not None else render_voice(segs, voice, rng, opts, m).audio
+    if dia.damaged:
+        audio = fx.wound(audio, rng, **wound)
+    audio = edges(audio, .06, left=.06*(1-join_left), right=.06*(1-join_right)) * gain
+    return dict(m=m, start=start, main=audio, moved=None, whisper=None,
+                bank_coverage=_bank_coverage(segs, opts, m))
+
+
+def _hum_speech_job(group):
+    return _speech_job(group, hum=True)
+
+
 def _hum_job(job):
     (wi, mi, m, segs, voice, wound, dia, opts, start, gain) = job
     rng = _rng(opts.seed, 2, wi, mi)
-    sig = render(segs, voice, rng).audio
+    sig = render_voice(segs, voice, rng, opts, m).audio
     if dia.damaged:
         sig = fx.wound(sig, rng, **wound)
-    return {"m": m, "start": start, "main": edges(sig, 0.06) * opts.hum * gain, "moved": None, "whisper": None}
+    return {"m": m, "start": start, "main": edges(sig, 0.06) * opts.hum * gain, "moved": None, "whisper": None, "bank_coverage": _bank_coverage(segs, opts, m)}
 
 
 def _choir_chunk_job(job):
     """One stretch of one praise voice, between two of its rests."""
     (vi, ci, offset, segs, voice, factor, opts) = job
     rng = _rng(opts.seed, 3, vi, ci)
-    return {"vi": vi, "offset": offset, "sig": render(segs, voice, rng, default_f0=voice.f0 * factor).audio}
+    return {"vi": vi, "offset": offset, "sig": render_voice(segs, voice, rng, opts, f"praise-{vi + 1}", default_f0=voice.f0 * factor).audio,
+            "bank_coverage": _bank_coverage(segs, opts, f"praise-{vi + 1}")}
 
 
 def phrase_chunks(segs, target=4.0):
@@ -671,38 +898,60 @@ def phrase_chunks(segs, target=4.0):
     return chunks
 
 
-def _run(fn, jobs, workers, say=None, label=""):
+def _run(fn, jobs, workers, say=None, label="", start_method="fork"):
     """Map fn over jobs, in parallel when it pays off."""
     import os
     workers = workers or os.cpu_count() or 1
-    if workers <= 1 or len(jobs) < 48:          # below that, starting the pool costs more than it saves
-        return [fn(j) for j in jobs]
+    grouped = fn in (_speech_job, _hum_speech_job) and any(len(group) > 1 for group in jobs)
+    if workers <= 1 or (len(jobs) < 48 and not grouped):          # below that, starting the pool costs more than it saves
+        yield from (fn(j) for j in jobs)
+        return
     import multiprocessing as mp
     from concurrent.futures import ProcessPoolExecutor
-    ctx = mp.get_context("fork")
+    ctx = mp.get_context(start_method)
     with ProcessPoolExecutor(max_workers=min(workers, len(jobs)), mp_context=ctx) as ex:
-        out = []
-        for i, res in enumerate(ex.map(fn, jobs, chunksize=1), 1):
-            out.append(res)
+        from collections import deque
+        pending = deque()
+        source = iter(jobs)
+        for _ in range(min(workers * 2, len(jobs))):
+            pending.append(ex.submit(fn, next(source)))
+        i = 0
+        while pending:
+            yield pending.popleft().result()
+            i += 1
+            job = next(source, None)
+            if job is not None:
+                pending.append(ex.submit(fn, job))
             if say and i % 16 == 0:
                 say(f"{label} {i}/{len(jobs)}")
-        return out
 
 
-def synthesize(score, opts=None, progress=None):
+def resolve_gender(score, dia, overrides=None):
+    if "voice" not in score.meta and not overrides:
+        if dia.voices:
+            return parse_voice(dia.voices)
+        if dia.gender is not None:
+            return {"all": dia.gender}
+    return {**parse_voice(score.meta.get("voice", "0")), **(overrides or {})}
+
+
+def plan(score, opts=None):
+    """Resolve configuration and plan timed segments without rendering audio."""
     opts = opts or Options()
+    if not 0 <= opts.prayer_tail <= 12 or not 0 <= opts.prayer_rise <= 24:
+        raise ValueError("Prayer tail must be 0–12 seconds and its rise 0–24 semitones.")
+    from .legato import validate
+    opts.mouth_blend = validate(opts.mouth_blend)
+    if not np.isfinite(opts.syllable_blend) or not 0 <= opts.syllable_blend <= 1:
+        raise ValueError('Syllable blend must be between 0 and 1.')
+    if opts.sample_banks:
+        from .samplebank import validate_selection
+        opts.sample_banks = validate_selection(opts.sample_banks)
     tempo = float(score.meta.get("tempo", 1.0))
-    say = progress or (lambda *_: None)
     knobs = {k: v for k, v in score.meta.items() if k in dialects.KNOBS}
     knobs.update(opts.knobs or {})
     dia = dialects.get(opts.dialect or score.meta.get("dialect"), knobs)
-    explicit_voice = "voice" in score.meta or bool(opts.voice)
-    gender = parse_voice(score.meta.get("voice", "0"))
-    if not explicit_voice and dia.voices:
-        gender = parse_voice(dia.voices)
-    elif not explicit_voice and dia.gender is not None:
-        gender["all"] = dia.gender
-    gender.update(opts.voice or {})
+    gender = resolve_gender(score, dia, opts.voice)
     femme = {m: max(gender.get(m, gender["all"]), 0.0) for m in MOUTHS}
     # Which dialect each mouth speaks at each word (all the same, except for
     # composite dialects like nephilim).
@@ -713,7 +962,7 @@ def synthesize(score, opts=None, progress=None):
         """A mouth's voice and wound in dialect d."""
         if (m, d.name) not in _voices:
             fem = femme[m]
-            v = mouth_voice(m, gender.get(m, gender["all"]))
+            v = replace(mouth_voice(m, gender.get(m, gender["all"])), transitions=opts.transitions)
             dmg = d.mouth(m, opts.seed) if d.damaged else {}
             # The fall shouldn't turn every voice male: toward feminine, the
             # pitch drop and the lengthened throat fade out (and the growl's
@@ -735,6 +984,10 @@ def synthesize(score, opts=None, progress=None):
               for wi in range(len(score.words))]
     last_of_sentence = {i for i, w in enumerate(score.words)
                         if i + 1 == len(score.words) or score.words[i + 1].sentence_start}
+    from .legato import amount as blend_amount
+    from .samplebank import selected
+    formant_blends = {m: 0.0 if selected(opts.sample_banks, m) else blend_amount(opts, m)
+                      for m in MOUTHS}
     for wi, w in enumerate(score.words):
         if w.sentence_start and plans:
             t += SENTENCE_GAP / tempo - WORD_GAP / tempo
@@ -743,7 +996,8 @@ def synthesize(score, opts=None, progress=None):
             ml = w.mouths[m]
             if not ml.silent:
                 R, T = role[(wi, m)], wt[(wi, m)]
-                segs = line_segments(ml, tempo, _rng(opts.seed, 0, wi, mi), R.moan, wi in last_of_sentence)
+                segs = line_segments(ml, tempo, _rng(opts.seed, 0, wi, mi), R.moan,
+                                     wi in last_of_sentence, formant_blends[m])
                 segs = tone_timing(segs, T)
                 if T.get("condescend") and wi in last_of_sentence:
                     segs.append(Seg("h", 0.25 + 0.15 * T["condescend"], amp=0.6))   # *sigh*
@@ -760,9 +1014,20 @@ def synthesize(score, opts=None, progress=None):
             for x in segs:
                 x.dur *= rub
         length *= rub
-        plans.append((w, t, lines, length))
+        plans.append(WordPlan(w, t, lines, length))
         t += length + WORD_GAP / tempo
-    total = t + TAIL
+    def setting(name, fallback=None):
+        value = getattr(opts, name)
+        return value if value is not None else score.meta.get(name, fallback)
+    rm = fx.room(setting("room", "cathedral"),
+                 rt60=float(setting("reverb_time")) if setting("reverb_time") is not None else None,
+                 predelay=float(setting("predelay")) if setting("predelay") is not None else None,
+                 tone=float(setting("reverb_tone")) if setting("reverb_tone") is not None else None)
+    amount = float(setting("reverb", 1.0))
+    decay = rm.rt60 * 1.15 + rm.predelay if amount > 0 and rm.wet else 0
+    total = t + max(TAIL, decay + (2.0 if opts.choir else 0))
+    if opts.choir:
+        total += opts.prayer_tail
     n = int(total * SR)
 
     # ---- hungry and tender words, for grab and hunger
@@ -821,6 +1086,24 @@ def synthesize(score, opts=None, progress=None):
                                    plans[wi][1], s0, s1, shape, wobble, set())
                     hums[(wi, m)] = hum_glide(segs, R.moan, _rng(opts.seed, 8, wi, mi))
 
+    return RenderPlan(opts, tempo, dia, knobs, gender, role, _voices, wt, wtones,
+                      plans, sentences, hums, flags, total, rm, amount)
+
+
+def synthesize(score, opts=None, progress=None, *, render_plan=None):
+    p = render_plan or plan(score, opts)
+    p.sample_report.clear()
+    p.vowel_brightness.clear()
+    opts, tempo, dia, knobs, gender = p.options, p.tempo, p.dialect, p.knobs, p.gender
+    role, wt, wtones = p.roles, p.mouth_tones, p.tones
+    plans, sentences, hums, flags, total = p.words, p.sentences, p.hums, p.flags, p.total
+    n = int(total * SR)
+    femme = {m: max(gender.get(m, gender["all"]), 0.0) for m in MOUTHS}
+    say = progress or (lambda *_: None)
+
+    def voice_of(m, d):
+        return p.voices[(m, d.name)]
+
     # ---- the mouths, as jobs
     line_jobs, hum_jobs = [], []
     for wi, (w, start, lines, length) in enumerate(plans):
@@ -836,12 +1119,34 @@ def synthesize(score, opts=None, progress=None):
                 line_jobs.append((wi, mi, m, lines[m], tone_voice(v, T), femme[m], wound, R, opts,
                                   levels, ml.moved, start, surge, tone_gain(T)))
     say(f"rendering {len(line_jobs)} mouth lines and {len(hum_jobs)} hums")
-    results = _run(_line_job, line_jobs, opts.jobs, say, "lines") + _run(_hum_job, hum_jobs, opts.jobs)
+    from itertools import chain
+    # A fresh interpreter avoids forking a process with native WORLD/BLAS state.
+    start_method = 'spawn' if any((opts.sample_banks or {}).values()) else 'fork'
+    groups = _speech_groups(line_jobs, plans)
+    from .legato import amount as blend_amount
+    connected_hums, isolated_hums = [], []
+    for job in hum_jobs:
+        wi,mi,m,segs,voice,wound,dia,_,start,gain = job
+        if blend_amount(opts,m) > 0:
+            connected_hums.append((wi,mi,m,segs,voice,0,wound,dia,opts,{},False,start,0,gain*opts.hum))
+        else:
+            isolated_hums.append(job)
+    hum_groups = _speech_groups(connected_hums, plans)
+    results = chain(chain.from_iterable(_run(_speech_job, groups, opts.jobs, say, "phrases", start_method)),
+                    chain.from_iterable(_run(_hum_speech_job, hum_groups, opts.jobs, start_method=start_method)),
+                    _run(_hum_job, isolated_hums, opts.jobs, start_method=start_method))
     tracks = {m: np.zeros(n) for m in MOUTHS}
     moved = {m: np.zeros(n) for m in MOUTHS}
     whispers = {m: np.zeros(n) for m in MOUTHS}
     for res in results:
         m, start = res["m"], res["start"]
+        _record_bank(p, m, res.get("bank_coverage"))
+        brightness = res.get("vowel_brightness")
+        if brightness:
+            origin = round(start * SR)
+            p.vowel_brightness.setdefault(f"mouth-{m}", []).extend(
+                ((origin + a) / SR, (origin + b) / SR, level) for a, b, level in brightness
+            )
         if res["main"] is not None:
             place(tracks[m], res["main"], start)
         if res["moved"] is not None:
@@ -850,9 +1155,13 @@ def synthesize(score, opts=None, progress=None):
         if res["whisper"] is not None:
             place(whispers[m], res["whisper"], start)
 
+    for timeline in p.vowel_brightness.values():
+        timeline.sort()
+
     # ---- praise voices
     choir_tracks = []
     if opts.choir:
+        speech_end = plans[-1].start + plans[-1].duration + WORD_GAP / tempo
         bounds = [p[1] for p in plans] + [total]
         choir_rng = random.Random(opts.seed)
         langs = [p[0].langs for p in plans]
@@ -863,7 +1172,7 @@ def synthesize(score, opts=None, progress=None):
                     return langs[i]
             return langs[-1]
 
-        jobs, lengths, chdmg = [], {}, {}
+        jobs, lengths, tails = [], {}, {}
         pain_spans = [(plans[wi][1], plans[wi][1] + plans[wi][3] + 0.4,
                        max(wtones[wi].get("pain", 0), wtones[wi].get("scream", 0)))
                       for wi in range(len(plans)) if wtones[wi].get("pain") or wtones[wi].get("scream")]
@@ -879,24 +1188,34 @@ def synthesize(score, opts=None, progress=None):
             factor *= 2 ** (cd.choir_pitch / 12)
             if cd.damaged:
                 voice = replace(voice, **{k: v for k, v in cd.choir_damage().items() if k != "whistle"})
-            voice = breathe(voice, cd.breath * 0.7)
-            segs = choir.schedule(lang_at, total - TAIL + 0.8, vi, tempo, start=LEAD_IN - 0.9,
-                                  rng=choir_rng, mode=cd.mode)
+            voice = replace(breathe(voice, cd.breath * 0.7), transitions=opts.transitions)
+            if opts.prayer_time:
+                spans = choir.time_spans(plans, vi, LEAD_IN - 0.9, speech_end + 0.8)
+                segs = choir.timed_schedule(spans, vi, tempo, rng=choir_rng, mode=cd.mode,
+                                            backmask=cd.choir == "backmask")
+            else:
+                segs = choir.schedule(lang_at, speech_end + 0.8, vi, tempo, start=LEAD_IN - 0.9,
+                                      rng=choir_rng, mode=cd.mode)
             for s in segs:
                 if s.f0:
                     s.f0 = (s.f0[0] * factor, s.f0[1] * factor)
             lengths[vi] = sum(s.dur for s in segs)
             segs = falter(segs, pain_spans, LEAD_IN - 0.9, lengths[vi], cd.choir == "backmask",
                           _rng(opts.seed, 14, vi))
+            if opts.prayer_tail:
+                segs, tails[vi] = choir.linger(segs, opts.prayer_tail, opts.prayer_rise,
+                                              backmask=cd.choir == "backmask")
+                lengths[vi] = sum(s.dur for s in segs)
             for ci, (offset, chunk) in enumerate(phrase_chunks(segs)):
                 jobs.append((vi, ci, offset, chunk, voice, factor, opts))
         say(f"praise voices ({len(jobs)} phrases)")
         tsec = np.arange(n) / SR
         env = np.clip((tsec - (LEAD_IN - 0.9)) / 0.6, 0, 1)
-        env *= np.clip((total - TAIL + 0.8 + 1.2 - tsec) / 1.2, 0, 1)
+        env *= np.clip((speech_end + 0.8 + 1.2 - tsec) / 1.2, 0, 1)
         voices_sig = {vi: np.zeros(int(lengths[vi] * SR) + SR) for vi in lengths}
-        for res in _run(_choir_chunk_job, jobs, opts.jobs):
+        for res in _run(_choir_chunk_job, jobs, opts.jobs, start_method=start_method):
             place(voices_sig[res["vi"]], res["sig"], res["offset"])
+            _record_bank(p, f"praise-{res['vi'] + 1}", res.get("bank_coverage"))
         for vi in sorted(voices_sig):
             sig = voices_sig[vi][: int(lengths[vi] * SR)]
             cd = cdias[vi]
@@ -908,7 +1227,17 @@ def synthesize(score, opts=None, progress=None):
                 sig = sig[::-1]         # blasphemy: the prayers sung backwards
             tr = np.zeros(n)
             place(tr, sig, LEAD_IN - 0.9)
-            choir_tracks.append(tr * env * opts.choir_level)
+            envelope = env
+            if tails.get(vi) is not None:
+                tail_start = LEAD_IN - 0.9 + tails[vi]
+                # Let the rising note speak for the first third, then use a
+                # cubic fade with a flat slope at both full gain and silence.
+                fade_time = opts.prayer_tail * (2 / 3)
+                fade_start = tail_start + opts.prayer_tail / 3
+                remaining = np.clip(1 - (tsec - fade_start) / fade_time, 0, 1)
+                envelope = np.clip((tsec - (LEAD_IN - 0.9)) / 0.6, 0, 1)
+                envelope *= remaining ** 2 * (3 - 2 * remaining)
+            choir_tracks.append(tr * envelope * opts.choir_level)
 
     # ---- grab and hunger: trajectories toward the ears, and mouth sounds
     curves = grab_curves(plans, sentences, flags, role, n) if any(R.grab for R in role.values()) else {}
@@ -929,7 +1258,8 @@ def synthesize(score, opts=None, progress=None):
     sources = []
     for m in MOUTHS:
         az, el, d = MOUTH_POS[m]
-        stems[f"mouth-{m}"] = tracks[m] + moved[m]
+        if opts.keep_stems:
+            stems[f"mouth-{m}"] = tracks[m] + moved[m]
         sources.append((f"mouth-{m}", tracks[m], az, el, d, 1.0, opts.reverb_mix, curves.get(m)))
         if moved[m].any():
             # In front of the closed mouth: nearer the listener, same side.
@@ -937,14 +1267,17 @@ def synthesize(score, opts=None, progress=None):
                             curves.get(m)))
         if whispers[m].any():
             # Right at the ears, on the mouth's side, dry: intimate, no hall.
-            stems[f"whisper-{m}"] = whispers[m]
+            if opts.keep_stems:
+                stems[f"whisper-{m}"] = whispers[m]
             sources.append((f"whisper-{m}", whispers[m], *near(az, el)[:2], 0.25, 1.0, 0.0, None))
         if m in foley and foley[m].any():
-            stems[f"foley-{m}"] = foley[m]
+            if opts.keep_stems:
+                stems[f"foley-{m}"] = foley[m]
             sources.append((f"foley-{m}", foley[m], *near(az, el), 1.0, 0.05, None))
     for vi, tr in enumerate(choir_tracks):
         az, el, d = CHOIR_POS[vi]
-        stems[f"praise-{vi + 1}"] = tr
+        if opts.keep_stems:
+            stems[f"praise-{vi + 1}"] = tr
         sources.append((f"praise-{vi + 1}", tr, az, el, d, 1.0, 1.4, None))
     mix = np.zeros((n, 2))
     send = np.zeros((n, 2))
@@ -968,28 +1301,43 @@ def synthesize(score, opts=None, progress=None):
     # Threads, not processes: scipy's filters release the GIL, and the
     # stereo results stay in memory instead of being copied back.
     if opts.jobs == 1:
-        placed = [spat(src) for src in sources]
+        for src in sources:
+            dry, wet = spat(src)
+            mix += dry
+            send += wet
     else:
         from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=len(sources)) as ex:
-            placed = list(ex.map(spat, sources))
-    for dry, wet in placed:
-        mix += dry
-        send += wet
+        import os
+        workers = min(len(sources), opts.jobs or os.cpu_count() or 1)
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            # Bound in-flight stereo buffers even on machines with many cores.
+            for start in range(0, len(sources), workers):
+                for dry, wet in ex.map(spat, sources[start:start + workers]):
+                    mix += dry
+                    send += wet
 
     # ---- the room
-    def meta_float(k):
-        return float(score.meta[k]) if k in score.meta else None
-    rm = fx.room(opts.room or score.meta.get("room", "cathedral"),
-                 rt60=opts.reverb_time if opts.reverb_time is not None else meta_float("reverb_time"),
-                 predelay=opts.predelay if opts.predelay is not None else meta_float("predelay"),
-                 tone=opts.reverb_tone if opts.reverb_tone is not None else meta_float("reverb_tone"))
-    amount = opts.reverb if opts.reverb is not None else (meta_float("reverb") if "reverb" in score.meta else 1.0)
+    rm, amount = p.room, p.reverb_amount
     out = mix
     if rm.rt60 > 0 and amount > 0 and rm.wet > 0:
         say(f"reverb: {rm.name}, RT60 {rm.rt60:.2f} s")
         ir = fx.room_ir(rm, _rng(opts.seed, 7))
         out = mix + fx.reverb(send, ir)[:n] * 0.5 * rm.wet * amount
-    peak = np.max(np.abs(out)) + 1e-9
-    out = np.tanh(out / peak * 1.1) / np.tanh(1.1) * 0.89
+    if opts.master:
+        out = master(out)
+    for channel, entry in sorted(p.sample_report.items()):
+        fallback = ', '.join(sorted(entry['counts'].get('formant', {}))) or 'none'
+        approximated = ', '.join(sorted(entry['counts'].get('approximation', {}))) or 'none'
+        say(f"{channel}: {entry['name']}; approximate: {approximated}; formant fallback: {fallback}")
     return out, stems
+
+
+def master(audio):
+    """Remove inaudible DC/rumble and leave headroom with mild saturation."""
+    from scipy.signal import sosfilt
+    clean = sosfilt(fx.design(2, 35, "highpass"), audio, axis=0)
+    peak = np.max(np.abs(clean)) + 1e-9
+    # The former 1.1 drive compressed every render heavily and added harmonics
+    # to already bright vowels. A lower drive preserves expressive dynamics.
+    drive = 0.35
+    return np.tanh(clean / peak * drive) / np.tanh(drive) * 0.89

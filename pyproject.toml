@@ -10,14 +10,18 @@ requires-python = ">=3.10"
 dependencies = ["numpy", "scipy"]
 
 [project.optional-dependencies]
+samples = ["pyworld>=0.3.5", "setuptools<81"] # local bank resynthesis; pyworld uses pkg_resources
 english = ["spacy>=3.7"]   # then: python -m spacy download en_core_web_sm
 fast = ["numba>=0.58"]     # compiled formant filters, ~28x faster
 
 [project.scripts]
 seraphim = "seraphim.cli:main"
+seraphim-web = "seraphim.web:main"
 
 [tool.setuptools]
-packages = ["seraphim"]
+packages = ["seraphim", "seraphim.examples"]
+package-dir = {"seraphim.examples" = "examples"}
 
 [tool.setuptools.package-data]
-seraphim = ["data/*.tsv"]
+seraphim = ["data/*.tsv", "web_assets/*"]
+"seraphim.examples" = ["*.sera"]

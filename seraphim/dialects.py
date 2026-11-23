@@ -19,6 +19,8 @@ succubus   Hellish grammar (heresy) in a seductive voice: feminine by default,
            breathy and moaning, whispering right at your ears, with only a
            trace of the fall (a little fry, a low growl underneath). The
            choir sings backwards in Phrygian.
+cupid      A light masculine voice with lilting vowels and a close whisper.
+           The playful melody falls into a dismissive close at sentence ends.
 
 nephilim   Half-angel, half-fallen (Genesis 6). Two diagonal mouths are
            seraphic, the other two fallen: succubus if that mouth's voice is
@@ -103,10 +105,13 @@ DIALECTS = {
     "succubus": Dialect("succubus", heresy=True, growl=0.25, fry=0.25, roar=0.1, whistle=0.0,
                         throat=0.1, pitch=0, disfigure=0.3, breath=0.65, moan=0.6, whisper=0.45,
                         grab=0.7, hunger=0.5, gender=0.85, choir="backmask", mode="phrygian", choir_pitch=0),
+    "cupid": Dialect("cupid", gender=-0.55, pitch=2, breath=0.34, moan=0.22,
+                     whisper=0.38, grab=0.28, tone="condescend:0.65"),
 }
 ALIASES = {"fallen": "demonic", "infernal": "demonic", "satanic": "demonic", "hellish": "demonic",
            "hell": "demonic", "angelic": "seraphic", "heavenly": "seraphic",
            "lilith": "succubus", "lilit": "succubus", "seductive": "succubus",
+           "eros": "cupid",
            "nephil": "nephilim", "hybrid": "nephilim", "grigori": "nephilim"}
 KNOBS = [f.name for f in fields(Dialect) if f.type in (float, "float")]
 

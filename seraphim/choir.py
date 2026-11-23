@@ -9,9 +9,45 @@ pick each language's prayers up where they last left them.
 """
 
 import random
+from dataclasses import replace
 
 from .phones import PHONES, V, tokenize_ipa
 from .synth import Seg
+
+
+def linger(segs, duration, semitones, *, backmask=False):
+    """Carry the closing syllables into a rising tail in playback order."""
+    ordered = segs[::-1] if backmask else segs
+    end = next((i for i in range(len(ordered) - 1, -1, -1)
+                if ordered[i].f0), None)
+    if end is None:
+        return segs, None
+    phrase = ordered[:end + 1]
+    start_pitch = phrase[-1].f0[0 if backmask else 1]
+    # Keep whole phones and include the consonants before the oldest vowel.
+    start = end
+    elapsed = 0.0
+    while start > 0 and elapsed < duration:
+        elapsed += phrase[start].dur
+        start -= 1
+    while start > 0 and phrase[start - 1].tag == phrase[end].tag and (
+            PHONES.get(phrase[start - 1].phone, {}).get("kind") != V):
+        start -= 1
+    closing = [s for s in phrase[start:] if s.f0 and s.tag == phrase[end].tag]
+    scale = duration / sum(s.dur for s in closing)
+
+    def pitch_at(t):
+        return start_pitch * 2 ** (semitones * t / (12 * duration))
+
+    tail = []
+    cursor = 0.0
+    for seg in closing:
+        length = seg.dur * scale
+        f0 = (pitch_at(cursor), pitch_at(cursor + length))
+        tail.append(replace(seg, dur=length, f0=f0[::-1] if backmask else f0))
+        cursor += length
+    played = phrase + tail
+    return (played[::-1] if backmask else played), sum(s.dur for s in phrase)
 
 PRAYERS = {
     "latin": [
@@ -202,3 +238,159 @@ def schedule(lang_at, total, voice_index, tempo=1.0, start=0.0, rng=None, mode="
             segs.append(Seg("sil", rest))
             t += rest
     return segs
+
+# Implementation extension: melodic signatures distinguish tense without adding
+# prayer languages. Scale-relative shapes survive transposition and dialect mode.
+TENSE_MOTIFS = {
+    'farpast': (4, 2, 0),
+    'gnomic': (4, 4, 4),
+    'nearpast': (0, 1, 2),
+    'nonpast': (2, 4, 2),
+}
+TENSE_CUES = {'farpast': 'descending', 'gnomic': 'steady', 'nearpast': 'rising', 'nonpast': 'arching',
+              'aramaic': 'unspecified Aramaic tense'}
+
+
+def time_spans(plans, voice_index, start, end):
+    """Final-playback intervals, including lead-in and tail. Each word gets a cue."""
+    from bisect import bisect_right
+    starts = [p.start for p in plans]
+    bounds = sorted({start, end, *(t for t in starts if start < t < end)})
+    spans = []
+    for a, b in zip(bounds, bounds[1:]):
+        index = max(0, bisect_right(starts, (a + b) / 2) - 1)
+        word = plans[index].word
+        tenses = word.tenses or [{'latin': 'nonpast', 'greek': 'nearpast', 'aramaic': 'aramaic'}[lang] for lang in word.langs]
+        # More than three simultaneous contexts need sequential subslots;
+        # otherwise the fourth label would never reach a prayer voice.
+        slots = (len(tenses) + 2) // 3
+        for slot in range(slots):
+            chosen = (slot * 3 + voice_index) % len(tenses)
+            tense = tenses[chosen]
+            lang = word.langs[chosen % len(word.langs)]
+            spans.append(dict(start=a + (b-a) * slot / slots, end=a + (b-a) * (slot+1) / slots,
+                              tense=tense, language=lang, word=index,
+                              cue=TENSE_CUES.get(tense, 'unspecified tense')))
+    return spans
+
+
+def _scale_hz(step, mode):
+    """Continuous scale degree, interpolated in log frequency."""
+    import math
+    lower = math.floor(step)
+    fraction = step - lower
+    a, b = step_to_hz(lower, mode), step_to_hz(lower + 1, mode)
+    return a * (b / a) ** fraction
+
+
+def motif_pitch(tense, progress, voice_index=0, mode='dorian'):
+    """Pure cue pitch, useful for preview legends and numerical verification."""
+    shape = TENSE_MOTIFS[tense]
+    x = min(max(progress, 0), 1) * 2
+    left = min(int(x), 1)
+    fraction = x - left
+    step = shape[left] + fraction * (shape[left + 1] - shape[left])
+    return _scale_hz(step + REGISTERS[voice_index], mode)
+
+
+def timed_schedule(spans, voice_index, tempo=1.0, rng=None, mode='dorian', backmask=False):
+    """Chant fits exact final-time intervals, including backwards playback.
+
+    Language order is mirrored before waveform reversal. Tense motifs are also
+    pre-mirrored, so their audible direction and assignment remain grammatical.
+    Syllables at boundaries fit the remaining slot rather than overrunning it.
+    """
+    from bisect import bisect_right
+    rng = rng or random.Random(0)
+    if not spans:
+        return []
+    chants, segs = {}, []
+    previous = None
+    for span in reversed(spans) if backmask else spans:
+        lang = span['language']
+        if lang not in chants:
+            chants[lang] = Chant(lang, rng)
+        span_duration = span['end'] - span['start']
+        remaining = span_duration
+        cue_duration = min(.42 / tempo, span_duration * .85)
+        cue_start, cue_end = (span_duration - cue_duration, span_duration) if backmask else (0, cue_duration)
+        first_in_span = len(segs)
+        while remaining > 1e-9:
+            # Stretch the last vowel into a tiny leftover slot instead of
+            # clipping the onset of a whole new syllable to a few milliseconds.
+            if remaining < .07 / tempo and len(segs) > first_in_span:
+                vowel = next((s for s in reversed(segs[first_in_span:]) if PHONES.get(s.phone, {}).get('kind') == V), segs[-1])
+                vowel.dur += remaining
+                break
+            phones, final, stressed, step = chants[lang].next()
+            f0 = step_to_hz(step + REGISTERS[voice_index], mode)
+            duration = BEATS[voice_index] / tempo * (2 if final else 1.3 if stressed else .85)
+            consonants = [p for p, _ in phones if PHONES[p]['kind'] != V]
+            vowels = [p for p, _ in phones if PHONES[p]['kind'] == V]
+            cdur = sum(min(PHONES[p]['dur'] / tempo, .07 / tempo) for p in consonants)
+            vdur = max(duration - cdur, .08 / tempo)
+            durations = [vdur / max(len(vowels), 1) if PHONES[p]['kind'] == V else min(PHONES[p]['dur'] / tempo, .07 / tempo) for p, _ in phones]
+            total = sum(durations)
+            if total <= 0:
+                break
+            scale = min(1, remaining / total)
+            for i, ((phone, _), d) in enumerate(zip(phones, durations)):
+                segs.append(Seg(phone, d * scale, (previous if i == 0 and previous else f0, f0), tag=lang))
+            previous = f0
+            remaining = max(0, remaining - total * scale)
+            if final and remaining > 1e-9:
+                rest = min(remaining, rng.uniform(.15, .35) / tempo)
+                elapsed = span_duration - remaining
+                # A phrase breath must not swallow the identifying contour.
+                if elapsed < cue_end and elapsed + rest > cue_start:
+                    rest = max(0, cue_start - elapsed)
+                if rest > 1e-9:
+                    segs.append(Seg('sil', rest))
+                    remaining -= rest
+
+    origin, end = spans[0]['start'], spans[-1]['end']
+    length = end - origin
+    starts = [span['start'] for span in spans]
+    # Split at cue control points so even a long vowel follows the whole shape.
+    final_cuts = set()
+    for span in spans:
+        duration = min(.42 / tempo, (span['end'] - span['start']) * .85)
+        final_cuts.update([span['start'], span['start'] + min(.025 / tempo, duration * .15),
+                           span['start'] + duration / 2, span['start'] + duration * .85,
+                           span['start'] + duration, span['end']])
+    cuts = sorted((end - t if backmask else t - origin) for t in final_cuts)
+
+    def mapped_pitch(frequency, when, span):
+        elapsed = when - span['start']
+        duration = min(.42 / tempo, (span['end'] - span['start']) * .85)
+        if span['tense'] not in TENSE_MOTIFS or not 0 <= elapsed <= duration:
+            return frequency
+        attack = min(.025 / tempo, duration * .15)
+        release = duration * .15
+        weight = min(1, elapsed / max(attack, 1e-9), (duration - elapsed) / max(release, 1e-9))
+        weight = weight * weight * (3 - 2 * weight)
+        target = motif_pitch(span['tense'], elapsed / duration, voice_index, mode)
+        return frequency * (target / frequency) ** weight
+
+    out, cursor = [], 0.0
+    for seg in segs:
+        finish = cursor + seg.dur
+        interior = cuts[bisect_right(cuts, cursor + 1e-9):bisect_right(cuts, finish - 1e-9)]
+        points = [cursor, *interior, finish]
+        for a, b in zip(points, points[1:]):
+            if b - a <= 1e-10:
+                continue
+            f0 = seg.f0
+            if f0:
+                midpoint = end - (a + b) / 2 if backmask else origin + (a + b) / 2
+                span = spans[max(0, min(len(spans) - 1, bisect_right(starts, midpoint) - 1))]
+                def pitch(x):
+                    base = f0[0] + (f0[1] - f0[0]) * ((x - cursor) / seg.dur)
+                    return mapped_pitch(base, end - x if backmask else origin + x, span)
+                f0 = (pitch(a), pitch(b))
+            out.append(replace(seg, dur=b - a, f0=f0))
+        cursor = finish
+    # Remove accumulated floating-point residue without changing musical time.
+    if out:
+        out[-1].dur += length - sum(s.dur for s in out)
+    return out

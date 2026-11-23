@@ -1,0 +1,19 @@
+@title: Prayer time — falling, steady, rising, arching
+@room: room
+@tone: neutral
+# Same speech, four distinct sung tense signatures.
+word farpast
+  top: /26/☀
+  1: /45/☀
+---
+word gnomic
+  top: /26/☀
+  1: /45/☀
+---
+word nearpast
+  top: /26/☀
+  1: /45/☀
+---
+word nonpast
+  top: /26/☀
+  1: /45/☀
