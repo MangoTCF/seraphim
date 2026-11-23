@@ -111,7 +111,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert.equal(await evaluate(`(() => {
       updateWord(result.words.at(-1).end, true);
       return $('nowword').querySelector('.display-current').textContent;
-    })()`),'The voices linger.');
+    })()`),'After the last word.');
     await evaluate('updateWord(0, true)');
     assert.equal(await evaluate('Object.keys(result.tracks).length'),8);
     assert.equal(await evaluate('result.resolved.options.prayer_tail'),1.6);

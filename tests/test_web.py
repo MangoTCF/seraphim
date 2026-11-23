@@ -110,7 +110,7 @@ class WebTests(unittest.TestCase):
             base = f'http://127.0.0.1:{server.server_port}'
             try:
                 with urlopen(base + '/') as response:
-                    self.assertIn(b'THE SEVENFOLD VOICE', response.read())
+                    self.assertIn(b'id="angel"', response.read())
                 for request in [Request(base + '/api/render', data=b'{}'),
                                 Request(base + '/api/session', headers={'Host': 'attacker.example'}),
                                 Request(base + '/api/example/../web.py')]:

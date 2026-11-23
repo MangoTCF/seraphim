@@ -303,7 +303,7 @@ function updateWord(t,force=false){
   const index=result.words.findIndex((word,i,words)=>
     t>=word.start&&t<(words[i+1]?.start??word.end));
   if(index===active&&!force)return;active=index;const word=result.words[index];
-  displayText($('nowword'),word?(result.selection!==null?`Word ${word.source_index+1} · isolated audition`:`Word ${index+1} of ${result.words.length}`):(t<result.words[0].start?'Before the first word.':'The voices linger.'));
+  displayText($('nowword'),word?(result.selection!==null?`Word ${word.source_index+1} · isolated audition`:`Word ${index+1} of ${result.words.length}`):(t<result.words[0].start?'Before the first word.':'After the last word.'));
   displayText($('nowdetail'),word?speechChannels.map(c=>word.mouths[c.key].gloss).join(' · '):'Prayer, breath and the shape of the room.');
   document.querySelectorAll('.wordcard').forEach((b,i)=>{b.classList.toggle('active',i===index);b.setAttribute('aria-pressed',String(i===index));});
   channels.forEach(c=>{
@@ -419,7 +419,7 @@ async function example(name){
     const response=await fetch(`/api/example/${encodeURIComponent(name)}`);
     if(!response.ok)throw new Error('Example unavailable');
     const text=await response.text();
-    if(sequence===scoreLoad)await loadScore(text,sequence,'Example loaded. Shape its sound, then render.');
+    if(sequence===scoreLoad)await loadScore(text,sequence,'Example loaded. Edit the score or render it.');
   }catch(e){if(sequence===scoreLoad)status(e.message,true);}
 }
 $('example').onchange=e=>example(e.target.value);

@@ -11,14 +11,14 @@
   <header class="topbar"><a class="brand" href="/">✳ SERAPHIM</a><a class="textbutton" href="/">Open workbench</a></header>
   <main class="studio-docs">
     <h1>Seraphim documentation</h1>
-    <p>Seraphim turns scored utterances into a seven-voice performance. Four mouths speak the morphemes in parallel. Three prayer voices carry the tense.</p>
+    <p>Seraphim renders scores with seven voices. Four mouths speak at the same time, and three prayer voices sing the tense.</p>
     <nav aria-label="On this page"><a href="#compose">Compose</a> · <a href="#dictionary">Dictionary</a> · <a href="#notation">Score notation</a> · <a href="#characters">Characters</a> · <a href="#render">Render and export</a> · <a href="#setup">Local setup</a></nav>
     <section class="panel" id="compose">
-      <h2>From English to score</h2>
+      <h2>Write a score in English</h2>
       <ol>
         <li>Choose <strong>English</strong>, enter a sentence, and pick a speaker character. Each character uses a different dialect and synthesis defaults.</li>
         <li>Click <strong>Prepare score</strong>. For unfamiliar glosses, Seraphim suggests pronunciations. Review those suggestions and save any changes to an entry, then build the score.</li>
-        <li>Choose a word in the score editor to change its tense, tone, stammer, or four mouth lines. Apply your edits, then insert, reorder, or delete words as needed. Undo reverses the most recent applied change in the current editor session.</li>
+        <li>Choose a word in the score editor to change its tense, tone, stammer, or four mouth lines. Apply your edits, then insert, reorder, or delete words as needed. Undo reverses your last change in the editor.</li>
         <li>Render from the score editor, or download the <code>.sera</code> file and render later.</li>
       </ol>
       <p>English translation is rule-based and approximate. Use <strong>Gloss</strong> for more explicit grammatical input, or open a <code>.sera</code> file to work from an existing score. To edit title, metadata, or sentence breaks, open <strong>Score source and metadata</strong> in the score editor and apply the changed source.</p>
@@ -26,8 +26,8 @@
     <section class="panel" id="dictionary">
       <h2>Dictionary and saved drafts</h2>
       <p>Search by gloss, part of speech, or pronunciation. Save an override for an installed entry or create a new gloss. Removing an override restores the installed entry if one exists. The editor checks token syntax and rejects pronunciations that collide with another gloss.</p>
-      <p>Browser overrides and accepted coinages apply to future English and gloss compositions. Generated scores embed the vocabulary they use. Rebuild a composition from its English or gloss draft to pick up dictionary changes.</p>
-      <p>Drafts, workbench settings, and dictionary overrides are saved in this browser's local storage for the current server address. Clearing site data or changing ports changes what drafts you see. Download a score to keep a portable copy.</p>
+      <p>The workbench uses your overrides and accepted pronunciations when it builds a score from English or gloss input. Generated scores embed the vocabulary they use. Rebuild a composition from its English or gloss draft to pick up dictionary changes.</p>
+      <p>Your browser saves drafts, settings, and dictionary overrides for each server address. Clearing site data deletes those drafts. If you change ports, open the original address to find them. Download a score to keep a portable copy.</p>
     </section>
     <section class="panel" id="notation">
       <h2>Score notation</h2>
@@ -62,7 +62,7 @@ word gnomic stammer
     </section>
     <section class="panel" id="render">
       <h2>Render and export</h2>
-      <p>The render uses the current score plus your workbench settings. The character picker previews the selected speaker and changes the dialect for the next render. To record a character choice in the source of an existing score, edit <code>@dialect</code>.</p>
+      <p>Rendering uses the current score and your sound settings. Pick a character to see its illustration and use its dialect on the next render. To record a character choice in the source of an existing score, edit <code>@dialect</code>.</p>
       <p>After rendering, play the full ensemble, solo a mouth, or select a word to inspect its parts and seek to it. The workbench can export WAV audio, a timing plan, and a bundle with stems, score, and render settings.</p>
       <pre><code>seraphim check score.sera
 seraphim synth score.sera -o out/score.wav</code></pre>
@@ -74,7 +74,7 @@ seraphim synth score.sera -o out/score.wav</code></pre>
 .venv/bin/python -m pip install -e '.[english]'
 .venv/bin/python -m spacy download en_core_web_sm
 .venv/bin/seraphim-web</code></pre>
-      <p>Open the localhost address printed by the server. The English model is used for English input. Gloss and score input can run with the base package.</p>
+      <p>Open the localhost address printed by the server. The workbench uses the spaCy model to parse English. Gloss and score input can run with the base package.</p>
     </section>
     <footer class="site-footer">
       <span>With <span class="footer-heart" aria-label="love">♥</span> by MangoTCF &amp; Gekko</span>
